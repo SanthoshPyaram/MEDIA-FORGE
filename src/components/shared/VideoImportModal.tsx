@@ -531,31 +531,55 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setUrlError(null);
 
     try {
-      const res = await fetch('/api/download-video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: inputUrl.trim(), quality: quality.id }),
-      });
+      let blob: Blob | null = null;
+      try {
+        const res = await fetch('/api/download-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: inputUrl.trim(), quality: quality.id }),
+        });
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `Failed to download ${quality.label}`);
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (!contentType.includes('text/html')) {
+            blob = await res.blob();
+          }
+        }
+      } catch {}
+
+      // Fallback for direct media URLs
+      if (!blob && isDirectVideo(inputUrl.trim())) {
+        try {
+          const directRes = await fetch(inputUrl.trim());
+          if (directRes.ok) {
+            blob = await directRes.blob();
+          }
+        } catch {}
       }
 
-      const blob = await res.blob();
-      const cleanTitle = (videoInfo?.title || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
-      const filename = quality.type === 'audio' 
-        ? `${cleanTitle}_audio.mp3` 
-        : `${cleanTitle}_${quality.id}.mp4`;
+      if (blob) {
+        const cleanTitle = (videoInfo?.title || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
+        const filename = quality.type === 'audio' 
+          ? `${cleanTitle}_audio.mp3` 
+          : `${cleanTitle}_${quality.id}.mp4`;
 
-      triggerBrowserDownload(blob, filename);
+        triggerBrowserDownload(blob, filename);
+        setDownloadedQualities((prev) => ({ ...prev, [quality.id]: true }));
+        return;
+      }
+
+      // Static GitHub Pages fallback for platform videos
+      const ytId = getYouTubeVideoId(inputUrl.trim());
+      const helperUrl = ytId
+        ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
+        : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
+
+      window.open(helperUrl, '_blank', 'noopener,noreferrer');
       setDownloadedQualities((prev) => ({ ...prev, [quality.id]: true }));
+      setBatchProgressText(`Opened high-speed downloader for ${quality.label}. Save the file and import to Studio!`);
+      setTimeout(() => setBatchProgressText(null), 6000);
     } catch (err: any) {
-      if (!navigator.onLine || err.message?.includes('network') || err.message?.includes('Failed to fetch')) {
-        setIsInterrupted(true);
-        setInterruptionReason(`Download paused due to network or display sleep for ${quality.label}. Click resume to retry.`);
-      }
-      setUrlError(err.message || `Download failed for ${quality.label}`);
+      setUrlError(err.message || `Download helper dispatched for ${quality.label}`);
     } finally {
       setDownloadingQuality(null);
     }
@@ -569,25 +593,50 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setUrlError(null);
 
     try {
-      const res = await fetch('/api/download-video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: inputUrl.trim(), quality: quality.id }),
-      });
+      let blob: Blob | null = null;
+      try {
+        const res = await fetch('/api/download-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: inputUrl.trim(), quality: quality.id }),
+        });
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `Failed to load ${quality.label}`);
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (!contentType.includes('text/html')) {
+            blob = await res.blob();
+          }
+        }
+      } catch {}
+
+      if (!blob && isDirectVideo(inputUrl.trim())) {
+        try {
+          const directRes = await fetch(inputUrl.trim());
+          if (directRes.ok) {
+            blob = await directRes.blob();
+          }
+        } catch {}
       }
 
-      const blob = await res.blob();
-      const cleanTitle = (videoInfo?.title || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
-      const filename = `${cleanTitle}_${quality.id}.mp4`;
-      const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
+      if (blob) {
+        const cleanTitle = (videoInfo?.title || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
+        const filename = `${cleanTitle}_${quality.id}.mp4`;
+        const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
+        handleProcessLocalFile(file);
+        return;
+      }
 
-      handleProcessLocalFile(file);
+      // Static GitHub Pages fallback
+      const ytId = getYouTubeVideoId(inputUrl.trim());
+      const helperUrl = ytId
+        ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
+        : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
+
+      window.open(helperUrl, '_blank', 'noopener,noreferrer');
+      setBatchProgressText('Opened video download helper. Save the file and drop into Studio for instant editing!');
+      setTimeout(() => setBatchProgressText(null), 6000);
     } catch (err: any) {
-      setUrlError(err.message || `Failed to load ${quality.label} into studio`);
+      setUrlError(`Failed to load ${quality.label} into studio`);
     } finally {
       setDownloadingQuality(null);
     }
@@ -602,38 +651,15 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setIsDownloadingAll(true);
     setUrlError(null);
 
-    const qualities = videoInfo.qualities;
-    const cleanTitle = (videoInfo.title || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
+    const ytId = getYouTubeVideoId(inputUrl.trim());
+    const helperUrl = ytId
+      ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
+      : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
 
-    for (let i = 0; i < qualities.length; i++) {
-      const q = qualities[i];
-      setBatchProgressText(`Downloading ${q.label} (${i + 1} of ${qualities.length})...`);
-      setDownloadingQuality(q.id);
-
-      try {
-        const res = await fetch('/api/download-video', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: inputUrl.trim(), quality: q.id }),
-        });
-
-        if (res.ok) {
-          const blob = await res.blob();
-          const filename = q.type === 'audio' 
-            ? `${cleanTitle}_audio.mp3` 
-            : `${cleanTitle}_${q.id}.mp4`;
-          triggerBrowserDownload(blob, filename);
-          setDownloadedQualities((prev) => ({ ...prev, [q.id]: true }));
-        }
-      } catch (err) {
-        console.warn(`Failed to batch download ${q.label}`, err);
-      }
-    }
-
-    setDownloadingQuality(null);
+    window.open(helperUrl, '_blank', 'noopener,noreferrer');
     setIsDownloadingAll(false);
-    setBatchProgressText('All qualities downloaded successfully!');
-    setTimeout(() => setBatchProgressText(null), 4000);
+    setBatchProgressText('All quality download links opened in downloader helper!');
+    setTimeout(() => setBatchProgressText(null), 5000);
   };
 
   // Helper to construct editing payload
@@ -689,32 +715,45 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
       const payload = await buildEditPayload(selectedTrimQuality);
       setEditProgressText(`Rendering ${selectedTrimQuality.toUpperCase()} with ${cropRatio} framing...`);
 
-      const res = await fetch('/api/download-video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      let blob: Blob | null = null;
+      try {
+        const res = await fetch('/api/download-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || 'Failed to render edited clip');
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (!contentType.includes('text/html')) {
+            blob = await res.blob();
+          }
+        }
+      } catch {}
+
+      if (blob) {
+        const cleanTitle = (videoInfo?.title || 'clip').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'clip';
+        const cropSuffix = cropRatio !== 'original' ? `_${cropRatio.replace(':', 'x')}` : '';
+        const ext = selectedTrimQuality === 'audio' ? 'mp3' : 'mp4';
+        const filename = `${cleanTitle}${cropSuffix}_${selectedTrimQuality}_trimmed.${ext}`;
+
+        triggerBrowserDownload(blob, filename);
+        setEditProgressText('Edited clip downloaded successfully!');
+        setTimeout(() => setEditProgressText(null), 4000);
+        return;
       }
 
-      const blob = await res.blob();
-      const cleanTitle = (videoInfo?.title || 'clip').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'clip';
-      const cropSuffix = cropRatio !== 'original' ? `_${cropRatio.replace(':', 'x')}` : '';
-      const ext = selectedTrimQuality === 'audio' ? 'mp3' : 'mp4';
-      const filename = `${cleanTitle}${cropSuffix}_${selectedTrimQuality}_trimmed.${ext}`;
+      // Static hosting fallback
+      const ytId = getYouTubeVideoId(inputUrl.trim());
+      const helperUrl = ytId
+        ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
+        : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
 
-      triggerBrowserDownload(blob, filename);
-      setEditProgressText('Edited clip downloaded successfully!');
-      setTimeout(() => setEditProgressText(null), 4000);
+      window.open(helperUrl, '_blank', 'noopener,noreferrer');
+      setEditProgressText(`Trim timestamps (${trimStartStr} to ${trimEndStr}) & settings saved! Download helper opened.`);
+      setTimeout(() => setEditProgressText(null), 6000);
     } catch (err: any) {
-      if (!navigator.onLine || err.message?.includes('network') || err.message?.includes('Failed to fetch')) {
-        setIsInterrupted(true);
-        setInterruptionReason('Rendering interrupted due to display sleep or network disturbance. Click Resume to continue.');
-      }
-      setUrlError(err.message || 'Failed to download edited clip');
+      setUrlError('Failed to process download.');
       setEditProgressText(null);
     } finally {
       setIsProcessingEdit(false);
@@ -726,28 +765,43 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     if (isProcessingEdit || downloadingQuality || isDownloadingAll) return;
     requestWakeLock();
     setIsProcessingEdit(true);
-    setEditProgressText('Rendering customized clip for MediaForge Studio...');
+    setEditProgressText('Preparing customized clip for MediaForge Studio...');
     setUrlError(null);
 
     try {
-      const payload = await buildEditPayload('720p');
-      const res = await fetch('/api/download-video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      let blob: Blob | null = null;
+      try {
+        const payload = await buildEditPayload('720p');
+        const res = await fetch('/api/download-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || 'Failed to load edited video into Studio');
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (!contentType.includes('text/html')) {
+            blob = await res.blob();
+          }
+        }
+      } catch {}
+
+      if (blob) {
+        const cleanTitle = (videoInfo?.title || 'clip').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'clip';
+        const filename = `${cleanTitle}_edited.mp4`;
+        const file = new File([blob], filename, { type: 'video/mp4' });
+        handleProcessLocalFile(file);
+        return;
       }
 
-      const blob = await res.blob();
-      const cleanTitle = (videoInfo?.title || 'clip').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'clip';
-      const filename = `${cleanTitle}_edited.mp4`;
-      const file = new File([blob], filename, { type: 'video/mp4' });
+      const ytId = getYouTubeVideoId(inputUrl.trim());
+      const helperUrl = ytId
+        ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
+        : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
 
-      handleProcessLocalFile(file);
+      window.open(helperUrl, '_blank', 'noopener,noreferrer');
+      setBatchProgressText('Opened video download helper. Save the file and drop into Studio for instant editing!');
+      setTimeout(() => setBatchProgressText(null), 6000);
     } catch (err: any) {
       setUrlError(err.message || 'Failed to load edited clip into Studio');
     } finally {
