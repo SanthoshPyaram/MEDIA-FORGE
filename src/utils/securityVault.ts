@@ -435,7 +435,7 @@ export function getVaultAdminData() {
       registeredName: u.name || `User ${u.id}`,
     })),
     devices: Object.values(db.devices),
-    deviceRequests: db.deviceRequests,
+    deviceRequests: db.deviceRequests.filter((r) => r.status === 'pending'),
     auditLogs: db.auditLogs,
   };
 }

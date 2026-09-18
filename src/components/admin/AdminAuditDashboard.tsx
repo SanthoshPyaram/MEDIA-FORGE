@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
   ShieldAlert,
@@ -163,7 +163,8 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
   // Feedback & Loading
   const [isLoading, setIsLoading] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
-  const [approvalPasskey, setApprovalPasskey] = useState('');
+  const [pinDigits, setPinDigits] = useState<string[]>(['', '', '', '', '', '']);
+  const pinInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
   const [isApproving, setIsApproving] = useState(false);
 
@@ -179,6 +180,17 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
   const [newUserNameInput, setNewUserNameInput] = useState('');
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [addUserError, setAddUserError] = useState<string | null>(null);
+
+  // Focus and clear PIN inputs when modal opens
+  useEffect(() => {
+    if (approveConfirmTarget) {
+      setPinDigits(['', '', '', '', '', '']);
+      setPasskeyError(null);
+      setTimeout(() => {
+        pinInputRefs.current[0]?.focus();
+      }, 60);
+    }
+  }, [approveConfirmTarget]);
 
   // -------------------------------------------------------------
   // Data Fetchers
@@ -217,7 +229,8 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
       });
       if (res.ok) {
         const data = await res.json();
-        setRequests(data.requests || []);
+        const pending = (data.requests || []).filter((r: any) => r.status === 'pending');
+        setRequests(pending);
       }
     } catch {}
   }, [token]);
@@ -336,18 +349,20 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
       );
 
       setRequests(
-        vData.deviceRequests.map((r) => ({
-          requestId: r.requestId,
-          userId: r.userId,
-          name: r.name,
-          deviceId: r.deviceId,
-          deviceType: r.deviceType,
-          operatingSystem: r.operatingSystem,
-          browser: r.browser,
-          friendlyName: r.friendlyName,
-          requestTime: r.requestTime,
-          status: r.status,
-        }))
+        vData.deviceRequests
+          .filter((r) => r.status === 'pending')
+          .map((r) => ({
+            requestId: r.requestId,
+            userId: r.userId,
+            name: r.name,
+            deviceId: r.deviceId,
+            deviceType: r.deviceType,
+            operatingSystem: r.operatingSystem,
+            browser: r.browser,
+            friendlyName: r.friendlyName,
+            requestTime: r.requestTime,
+            status: r.status,
+          }))
       );
 
       setDevices(
@@ -403,18 +418,109 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
   }, [refreshAll]);
 
   // -------------------------------------------------------------
+  // PIN Input Handlers
+  // -------------------------------------------------------------
+  const handleDigitChange = (index: number, value: string) => {
+    const cleanVal = value.replace(/\D/g, '');
+    if (!cleanVal) {
+      const newDigits = [...pinDigits];
+      newDigits[index] = '';
+      setPinDigits(newDigits);
+      setPasskeyError(null);
+      return;
+    }
+
+    if (cleanVal.length > 1) {
+      const pasted = cleanVal.slice(0, 6).split('');
+      const newDigits = [...pinDigits];
+      for (let k = 0; k < 6; k++) {
+        if (pasted[k] !== undefined) {
+          newDigits[k] = pasted[k];
+        }
+      }
+      setPinDigits(newDigits);
+      setPasskeyError(null);
+      const nextFocus = Math.min(pasted.length, 5);
+      pinInputRefs.current[nextFocus]?.focus();
+      if (newDigits.every((d) => d.length === 1)) {
+        handleConfirmApproval(newDigits.join(''));
+      }
+      return;
+    }
+
+    const digit = cleanVal.slice(-1);
+    const newDigits = [...pinDigits];
+    newDigits[index] = digit;
+    setPinDigits(newDigits);
+    setPasskeyError(null);
+
+    if (digit && index < 5) {
+      pinInputRefs.current[index + 1]?.focus();
+    }
+
+    if (digit && index === 5 && newDigits.every((d) => d.length === 1)) {
+      handleConfirmApproval(newDigits.join(''));
+    }
+  };
+
+  const handleDigitKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace') {
+      if (!pinDigits[index] && index > 0) {
+        const newDigits = [...pinDigits];
+        newDigits[index - 1] = '';
+        setPinDigits(newDigits);
+        pinInputRefs.current[index - 1]?.focus();
+      } else {
+        const newDigits = [...pinDigits];
+        newDigits[index] = '';
+        setPinDigits(newDigits);
+      }
+      setPasskeyError(null);
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      pinInputRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && index < 5) {
+      pinInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleDigitPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    const digits = pasted.split('');
+    const newDigits = ['', '', '', '', '', ''];
+    for (let k = 0; k < 6; k++) {
+      if (digits[k]) newDigits[k] = digits[k];
+    }
+    setPinDigits(newDigits);
+    setPasskeyError(null);
+    const nextIdx = Math.min(digits.length, 5);
+    pinInputRefs.current[nextIdx]?.focus();
+    if (digits.length === 6) {
+      handleConfirmApproval(digits.join(''));
+    }
+  };
+
+  // -------------------------------------------------------------
   // Actions: Approve / Reject / Revoke / Rename
   // -------------------------------------------------------------
-  const handleConfirmApproval = async (enteredPasskey: string) => {
+  const handleConfirmApproval = async (enteredPasskey?: string) => {
     if (!token || !approveConfirmTarget) return;
 
-    if (enteredPasskey.trim() !== '630211') {
-      setPasskeyError('Invalid passkey. Enter 630211 to approve.');
+    const code = (enteredPasskey !== undefined ? enteredPasskey : pinDigits.join('')).trim();
+
+    if (code !== '630211') {
+      setPasskeyError('Invalid authorization passkey. Please check the code and try again.');
+      setPinDigits(['', '', '', '', '', '']);
+      setTimeout(() => {
+        pinInputRefs.current[0]?.focus();
+      }, 60);
       return;
     }
 
     setIsApproving(true);
     setPasskeyError(null);
+    const targetReq = approveConfirmTarget;
 
     try {
       let serverHandled = false;
@@ -427,9 +533,9 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
               Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
-              requestId: approveConfirmTarget.requestId,
-              deviceId: approveConfirmTarget.deviceId,
-              userId: approveConfirmTarget.userId,
+              requestId: targetReq.requestId,
+              deviceId: targetReq.deviceId,
+              userId: targetReq.userId,
               passkey: '630211',
             }),
           });
@@ -443,18 +549,27 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
 
       if (!serverHandled) {
         setVaultDeviceStatus(
-          approveConfirmTarget.userId,
-          approveConfirmTarget.deviceId,
+          targetReq.userId,
+          targetReq.deviceId,
           'approved',
           '630211'
         );
       }
 
+      // Optimistically remove approved card from requests state
+      setRequests((prev) =>
+        prev.filter(
+          (r) =>
+            r.requestId !== targetReq.requestId &&
+            !(r.userId === targetReq.userId && r.deviceId === targetReq.deviceId)
+        )
+      );
+
       setFeedbackMessage(
-        `✓ Approved device ${approveConfirmTarget.friendlyName} for ${approveConfirmTarget.name} (Verified with Passkey 630211 🔑)`
+        `✓ Approved device ${targetReq.friendlyName} for ${targetReq.name}`
       );
       setApproveConfirmTarget(null);
-      setApprovalPasskey('');
+      setPinDigits(['', '', '', '', '', '']);
       setIsApproving(false);
       refreshAll();
     } catch (e: any) {
@@ -488,6 +603,15 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
       if (!serverHandled) {
         setVaultDeviceStatus(reqItem.userId, reqItem.deviceId, 'rejected');
       }
+
+      // Optimistically remove rejected card from requests state
+      setRequests((prev) =>
+        prev.filter(
+          (r) =>
+            r.requestId !== reqItem.requestId &&
+            !(r.userId === reqItem.userId && r.deviceId === reqItem.deviceId)
+        )
+      );
 
       setFeedbackMessage(`Rejected device request for ${reqItem.name}`);
       refreshAll();
@@ -915,28 +1039,32 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
       {/* ========================================================= */}
       {/* SECTION 3: DEVICE REQUESTS                                */}
       {/* ========================================================= */}
-      {activeSection === 'requests' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider">PENDING DEVICE APPROVAL REQUESTS</h2>
-              <p className="text-xs text-slate-400">Requests created when authenticated users connect with a new device</p>
+      {activeSection === 'requests' && (() => {
+        const pendingList = requests.filter((r) => r.status === 'pending');
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                  PENDING DEVICE APPROVAL REQUESTS ({pendingList.length})
+                </h2>
+                <p className="text-xs text-slate-400">Requests created when authenticated users connect with a new device</p>
+              </div>
             </div>
-          </div>
 
-          {requests.length === 0 ? (
-            <div className="p-12 rounded-2xl bg-slate-900 border border-slate-800 text-center space-y-2">
-              <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-              <div className="text-sm font-bold text-white">No Pending Requests</div>
-              <p className="text-xs text-slate-400">All device connection requests have been reviewed.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {requests.map((req) => (
-                <div
-                  key={req.requestId}
-                  className="p-5 rounded-2xl bg-slate-900 border border-amber-500/50 shadow-lg shadow-amber-500/5 space-y-4"
-                >
+            {pendingList.length === 0 ? (
+              <div className="p-12 rounded-2xl bg-slate-900 border border-slate-800 text-center space-y-2">
+                <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+                <div className="text-sm font-bold text-white">No Pending Requests</div>
+                <p className="text-xs text-slate-400">All device connection requests have been reviewed.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {pendingList.map((req) => (
+                  <div
+                    key={req.requestId}
+                    className="p-5 rounded-2xl bg-slate-900 border border-amber-500/50 shadow-lg shadow-amber-500/5 space-y-4"
+                  >
                   <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                     <div className="flex items-center gap-2">
                       <ShieldAlert className="w-5 h-5 text-amber-400" />
@@ -1000,7 +1128,8 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
             </div>
           )}
         </div>
-      )}
+      );
+      })()}
 
       {/* ========================================================= */}
       {/* SECTION 4: APPROVED DEVICES                               */}
@@ -1235,7 +1364,9 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
 
             <div className="space-y-1">
               <h3 className="text-lg font-bold text-white">Approve Device Authorization</h3>
-              <p className="text-xs text-slate-400">Enter Admin Passkey (<span className="text-emerald-400 font-mono font-semibold">630211</span>) to approve hardware access.</p>
+              <p className="text-xs text-slate-400">
+                Enter the 6-digit administrator authorization passkey to approve hardware access.
+              </p>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-left space-y-2 text-xs">
@@ -1260,29 +1391,50 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                handleConfirmApproval(approvalPasskey);
+                handleConfirmApproval();
               }}
               className="space-y-4 pt-1"
             >
-              <div className="text-left space-y-1.5">
-                <label className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+              <div className="space-y-2">
+                <label className="text-[11px] font-semibold text-slate-300 flex items-center justify-center gap-1.5">
                   <Key className="w-3.5 h-3.5 text-emerald-400" />
-                  Admin Passkey
+                  <span>Admin 6-Digit Passkey</span>
                 </label>
-                <input
-                  type="password"
-                  value={approvalPasskey}
-                  onChange={(e) => {
-                    setApprovalPasskey(e.target.value);
-                    setPasskeyError(null);
-                  }}
-                  placeholder="Enter Passkey (630211)"
-                  autoFocus
-                  maxLength={10}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-center tracking-widest text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                />
+
+                {/* 6 Individual PIN Input Boxes with Animated Focus */}
+                <div className="flex items-center justify-center gap-2 sm:gap-2.5 py-1">
+                  {pinDigits.map((digit, idx) => {
+                    const isFilled = Boolean(digit);
+                    return (
+                      <input
+                        key={idx}
+                        ref={(el) => {
+                          pinInputRefs.current[idx] = el;
+                        }}
+                        type="password"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handleDigitChange(idx, e.target.value)}
+                        onKeyDown={(e) => handleDigitKeyDown(idx, e)}
+                        onPaste={handleDigitPaste}
+                        className={`w-11 h-12 sm:w-12 sm:h-14 text-center text-lg sm:text-xl font-mono font-bold rounded-2xl bg-slate-950 border transition-all duration-200 outline-none select-none ${
+                          passkeyError
+                            ? 'border-rose-500/80 text-rose-300 shadow-lg shadow-rose-500/15'
+                            : isFilled
+                            ? 'border-emerald-500/80 text-emerald-300 shadow-md shadow-emerald-500/20 scale-[1.03]'
+                            : 'border-slate-800 text-white hover:border-slate-700'
+                        } focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40 focus:scale-105 focus:bg-slate-900`}
+                      />
+                    );
+                  })}
+                </div>
+
                 {passkeyError && (
-                  <p className="text-rose-400 text-[11px] font-medium text-center">{passkeyError}</p>
+                  <p className="text-rose-400 text-[11px] font-medium text-center animate-shake">
+                    {passkeyError}
+                  </p>
                 )}
               </div>
 
@@ -1291,17 +1443,17 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
                   type="button"
                   onClick={() => {
                     setApproveConfirmTarget(null);
-                    setApprovalPasskey('');
+                    setPinDigits(['', '', '', '', '', '']);
                     setPasskeyError(null);
                   }}
-                  className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
+                  className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isApproving || !approvalPasskey.trim()}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:brightness-110 disabled:opacity-50 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-1.5"
+                  disabled={isApproving || pinDigits.some((d) => !d)}
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:brightness-110 disabled:opacity-50 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                 >
                   {isApproving ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
