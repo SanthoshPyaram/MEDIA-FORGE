@@ -26,6 +26,7 @@ import {
   FileText,
   HelpCircle,
   Fingerprint,
+  UserPlus,
 } from 'lucide-react';
 import { verifyAdminBiometric } from '@/utils/biometricAuth';
 
@@ -164,6 +165,14 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
   const [approveConfirmTarget, setApproveConfirmTarget] = useState<DeviceRequest | null>(null);
   const [renameTarget, setRenameTarget] = useState<{ userId: string; deviceId?: string; currentName: string; isDevice?: boolean } | null>(null);
   const [newNameInput, setNewNameInput] = useState('');
+
+  // Add User State
+  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
+  const [newUserIdInput, setNewUserIdInput] = useState('');
+  const [newUserPasswordInput, setNewUserPasswordInput] = useState('');
+  const [newUserNameInput, setNewUserNameInput] = useState('');
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [addUserError, setAddUserError] = useState<string | null>(null);
 
   // -------------------------------------------------------------
   // Data Fetchers
@@ -404,6 +413,47 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
     } catch {}
   };
 
+  const handleAddUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !newUserIdInput.trim() || !newUserPasswordInput.trim()) return;
+
+    setIsAddingUser(true);
+    setAddUserError(null);
+
+    try {
+      const res = await fetch('/api/admin/users/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          userId: newUserIdInput.trim(),
+          password: newUserPasswordInput.trim(),
+          name: newUserNameInput.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      setIsAddingUser(false);
+
+      if (res.ok && data.success) {
+        setFeedbackMessage(`✓ User ${newUserIdInput.trim()} added! Password was hashed with SHA-256 and saved to .env.`);
+        setIsAddUserModalOpen(false);
+        setNewUserIdInput('');
+        setNewUserPasswordInput('');
+        setNewUserNameInput('');
+        refreshAll();
+      } else {
+        setAddUserError(data.error || 'Failed to add user.');
+      }
+    } catch (err: any) {
+      setIsAddingUser(false);
+      setAddUserError(err.message || 'Network error creating user.');
+    }
+  };
+
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Top Header Bar */}
@@ -624,11 +674,25 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
       {/* ========================================================= */}
       {activeSection === 'users' && (
         <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider">5 AUTHORIZED USERS</h2>
-              <p className="text-xs text-slate-400">User accounts configured in server-side environment variables</p>
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                AUTHORIZED USERS ({usersList.length})
+              </h2>
+              <p className="text-xs text-slate-400">
+                User accounts configured in server-side environment variables (.env)
+              </p>
             </div>
+            <button
+              onClick={() => {
+                setAddUserError(null);
+                setIsAddUserModalOpen(true);
+              }}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition-all cursor-pointer self-start sm:self-auto"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add New User</span>
+            </button>
           </div>
 
           <div className="overflow-x-auto">
@@ -1107,6 +1171,110 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
                 Save Changes
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL 3: ADD NEW USER MODAL (AUTO-HASHED TO .ENV)         */}
+      {/* ========================================================= */}
+      {isAddUserModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Add Authorized User</h3>
+                  <p className="text-[11px] text-slate-400">Auto SHA-256 hashed & stored into .env</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAddUserModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddUserSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
+                  User ID (Phone Number)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newUserIdInput}
+                  onChange={(e) => setNewUserIdInput(e.target.value)}
+                  placeholder="Enter phone number (e.g. 9876543210)"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
+                  Password (Registration Number)
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={newUserPasswordInput}
+                  onChange={(e) => setNewUserPasswordInput(e.target.value)}
+                  placeholder="Enter registration number / password"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
+                  Display Name <span className="text-slate-500 lowercase font-normal">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={newUserNameInput}
+                  onChange={(e) => setNewUserNameInput(e.target.value)}
+                  placeholder="Enter user full name"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 leading-relaxed">
+                🔒 <strong>Security Note:</strong> The password will automatically be SHA-256 hashed and appended directly to the server <code>.env</code> file. When this user logs in for the first time, they will undergo the device approval workflow.
+              </div>
+
+              {addUserError && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300">
+                  {addUserError}
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddUserModalOpen(false)}
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAddingUser || !newUserIdInput.trim() || !newUserPasswordInput.trim()}
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isAddingUser ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Hashing & Saving...</span>
+                    </>
+                  ) : (
+                    <span>Add User to .env</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -27,7 +27,7 @@ import { SecurityGateway } from '@/components/auth/SecurityGateway';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { useJobQueue } from '@/context/JobQueueContext';
 import { DetectedFileInfo } from '@/types/job';
-import { AlertCircle, ChevronDown, ChevronUp, RefreshCw, ShieldAlert } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, RefreshCw, ShieldAlert, Lock } from 'lucide-react';
 import { getWorkspaceTheme } from '@/lib/theme/workspaceThemes';
 
 const AppContent: React.FC = () => {
@@ -41,6 +41,24 @@ const AppContent: React.FC = () => {
   const [importModalTab, setImportModalTab] = useState<ImportTab>('upload');
   const [showErrorDetails, setShowErrorDetails] = useState(false);
 
+  // Authentication Gateway Modal
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authPortalMode, setAuthPortalMode] = useState<'USER' | 'ADMIN'>('USER');
+
+  const openAuth = (portal: 'USER' | 'ADMIN' = 'USER') => {
+    setAuthPortalMode(portal);
+    setIsAuthModalOpen(true);
+  };
+
+  const handleNavigate = (view: string) => {
+    if (!isAuthenticated && view !== 'home' && view !== 'privacy') {
+      openAuth(view === 'admin' ? 'ADMIN' : 'USER');
+      return;
+    }
+    setCurrentView(view);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const heroVideoInputRef = useRef<HTMLInputElement>(null);
 
   const { jobs, activeJobId, addJob, startJob, cancelJob } = useJobQueue();
@@ -51,6 +69,10 @@ const AppContent: React.FC = () => {
 
   // Triggered when file is dropped on upload zone
   const handleFileDetected = (fileInfo: DetectedFileInfo) => {
+    if (!isAuthenticated) {
+      openAuth('USER');
+      return;
+    }
     setActiveFileInfo(fileInfo);
     if (fileInfo.category === 'video') setCurrentView('video');
     else if (fileInfo.category === 'image') setCurrentView('image');
@@ -60,6 +82,10 @@ const AppContent: React.FC = () => {
   };
 
   const handleHeroVideoPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAuthenticated) {
+      openAuth('USER');
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
     const ext = file.name.split('.').pop() || 'mp4';
@@ -79,6 +105,10 @@ const AppContent: React.FC = () => {
   };
 
   const handleBatchDetected = (batch: DetectedFileInfo[]) => {
+    if (!isAuthenticated) {
+      openAuth('USER');
+      return;
+    }
     batch.forEach((info) => {
       addJob(info, info.category === 'video' ? 'transcode' : info.category === 'image' ? 'convert' : 'process', {});
     });
@@ -86,6 +116,10 @@ const AppContent: React.FC = () => {
   };
 
   const handleSmartProcessTrigger = (fileInfo: DetectedFileInfo) => {
+    if (!isAuthenticated) {
+      openAuth('USER');
+      return;
+    }
     setSmartProcessTarget(fileInfo);
   };
 
@@ -103,6 +137,10 @@ const AppContent: React.FC = () => {
     operation: string,
     options: Record<string, any>
   ) => {
+    if (!isAuthenticated) {
+      openAuth('USER');
+      return;
+    }
     const jobId = addJob(fileInfo, operation, options);
     await startJob(jobId);
   };
@@ -121,10 +159,6 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // 2. Unauthenticated state: Render Security Gateway Login Screen
-  if (!isAuthenticated) {
-    return <SecurityGateway />;
-  }
 
   const currentTheme = getWorkspaceTheme(currentView);
 
@@ -158,11 +192,15 @@ const AppContent: React.FC = () => {
         <CompatibilityBanner />
         <Header
           currentView={currentView}
-          onNavigate={(v) => {
-            setCurrentView(v);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+          onNavigate={handleNavigate}
+          onOpenQueue={() => {
+            if (!isAuthenticated) {
+              openAuth('USER');
+              return;
+            }
+            setIsQueueOpen(true);
           }}
-          onOpenQueue={() => setIsQueueOpen(true)}
+          onOpenAuth={openAuth}
         />
 
         {/* Hidden file picker for hero video button */}
@@ -180,10 +218,18 @@ const AppContent: React.FC = () => {
             <>
               <Hero
                 onUploadVideo={() => {
+                  if (!isAuthenticated) {
+                    openAuth('USER');
+                    return;
+                  }
                   setImportModalTab('upload');
                   setIsImportModalOpen(true);
                 }}
                 onImportUrl={() => {
+                  if (!isAuthenticated) {
+                    openAuth('USER');
+                    return;
+                  }
                   setImportModalTab('url');
                   setIsImportModalOpen(true);
                 }}
@@ -192,6 +238,45 @@ const AppContent: React.FC = () => {
                   el?.scrollIntoView({ behavior: 'smooth' });
                 }}
               />
+
+              {/* Sign In to Access Banner for Unauthenticated Visitors */}
+              {!isAuthenticated && (
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 my-5">
+                  <div className="p-5 rounded-3xl bg-gradient-to-r from-emerald-950/70 via-slate-900/90 to-[#0c1420] border border-emerald-500/30 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                        <Lock className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-white">Private Platform Access</span>
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            Only for specified users
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300 mt-0.5">
+                          MediaForge is restricted to authorized accounts. Sign in to convert, process, and edit media files.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+                      <button
+                        onClick={() => openAuth('ADMIN')}
+                        className="px-3.5 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-bold transition-all cursor-pointer"
+                      >
+                        Admin Portal
+                      </button>
+                      <button
+                        onClick={() => openAuth('USER')}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:brightness-110 active:scale-95 text-white text-xs font-bold shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>Sign In to Access</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div id="upload-zone" className="my-8">
                 <UniversalUploadZone
@@ -220,8 +305,7 @@ const AppContent: React.FC = () => {
 
               <SupportedToolsGrid
                 onSelectCategory={(cat) => {
-                  setCurrentView(cat);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  handleNavigate(cat);
                 }}
               />
               <HowItWorks />
@@ -398,6 +482,17 @@ const AppContent: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Security Gateway Modal (User Sign-In / Admin Control) */}
+        {isAuthModalOpen && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+            <SecurityGateway
+              initialPortal={authPortalMode}
+              onClose={() => setIsAuthModalOpen(false)}
+              onSuccess={() => setIsAuthModalOpen(false)}
+            />
           </div>
         )}
       </div>

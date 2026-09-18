@@ -8,10 +8,14 @@ dist/
 dist-ssr/
 *.local
 
-# Environment variables & secrets (Never commit .env to GitHub)
+# Environment variables & secrets (Never commit .env, .env.example, or any secret keys to GitHub)
 .env
+.env.*
+.env.example
+.env.local
 .env.production
 .env.staging
+*.env
 
 # Editor and OS files
 .vscode/

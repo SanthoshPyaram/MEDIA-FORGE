@@ -148,18 +148,79 @@ function loadEnvCredentials(rootDir: string): {
   };
 
   const users: UserCredential[] = [];
-  for (let i = 1; i <= 5; i++) {
-    const id = (envVars[`USER_${i}_ID`] || `USER00${i}`).trim();
-    const passHash = envVars[`USER_${i}_PASSWORD_HASH`] || envVars[`USER_${i}_PASSWORD`] || '';
-    users.push({
-      id,
-      passwordHash: passHash,
-      role: 'user',
-    });
+  const userIndices = new Set<number>();
+  for (const key of Object.keys(envVars)) {
+    const match = key.match(/^USER_(\d+)_ID$/);
+    if (match) {
+      userIndices.add(parseInt(match[1], 10));
+    }
+  }
+  const maxIndex = userIndices.size > 0 ? Math.max(5, ...Array.from(userIndices)) : 5;
+  for (let i = 1; i <= maxIndex; i++) {
+    const id = (envVars[`USER_${i}_ID`] || '').trim();
+    if (id) {
+      const passHash = envVars[`USER_${i}_PASSWORD_HASH`] || envVars[`USER_${i}_PASSWORD`] || '';
+      users.push({
+        id,
+        passwordHash: passHash,
+        role: 'user',
+      });
+    }
   }
 
   return { admin, users, authSecret };
 }
+
+// -------------------------------------------------------------
+// Helper: Add New User to .env with Auto SHA-256 Hashed Password
+// -------------------------------------------------------------
+function addUserToEnv(
+  rootDir: string,
+  userId: string,
+  passwordPlain: string
+): { success: boolean; userIndex: number; error?: string } {
+  const envPath = path.resolve(rootDir, '.env');
+  let raw = '';
+  if (fs.existsSync(envPath)) {
+    raw = fs.readFileSync(envPath, 'utf8');
+  }
+
+  // Check if userId already exists
+  const lines = raw.split(/\r?\n/);
+  const userIndices: number[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^USER_(\d+)_ID\s*=\s*(.*)$/);
+    if (match) {
+      const idx = parseInt(match[1], 10);
+      userIndices.push(idx);
+      const existingId = match[2].trim().replace(/^["']|["']$/g, '');
+      if (existingId.toLowerCase() === userId.trim().toLowerCase()) {
+        return {
+          success: false,
+          userIndex: idx,
+          error: `User ID "${userId}" already exists in .env configuration.`,
+        };
+      }
+    }
+  }
+
+  // Determine next index
+  const nextIdx = userIndices.length > 0 ? Math.max(...userIndices) + 1 : 1;
+
+  // Compute SHA-256 hash
+  const hash = crypto.createHash('sha256').update(passwordPlain.trim()).digest('hex');
+
+  // Format entry
+  const newEntry = `\n# User ${nextIdx}\nUSER_${nextIdx}_ID=${userId.trim()}\nUSER_${nextIdx}_PASSWORD_HASH=${hash}\n`;
+
+  // Append cleanly
+  const updatedContent = raw.endsWith('\n') ? raw + newEntry.trimStart() : raw + '\n' + newEntry.trimStart();
+  fs.writeFileSync(envPath, updatedContent, 'utf8');
+
+  return { success: true, userIndex: nextIdx };
+}
+
 
 // -------------------------------------------------------------
 // Helper: Check Password against Stored Hash or Plaintext
@@ -1056,7 +1117,7 @@ export function createAuthMiddleware(rootDir: string) {
 
       return sendJson(200, {
         summary: {
-          totalUsers: 5,
+          totalUsers: users.length,
           approvedDevices: approvedCount,
           pendingRequests: pendingCount,
           revokedDevices: revokedCount,
@@ -1123,6 +1184,56 @@ export function createAuthMiddleware(rootDir: string) {
         }
         dbManager.save();
         return sendJson(200, { success: true });
+      });
+      return;
+    }
+
+    // C2. POST /api/admin/users/create (Adds user, hashes password, saves to .env)
+    if (url === '/api/admin/users/create' && req.method === 'POST') {
+      parseBody((body) => {
+        const userId = (body.userId || '').trim();
+        const password = (body.password || '').trim();
+        const name = (body.name || '').trim();
+
+        if (!userId || !password) {
+          return sendJson(400, { error: 'User ID and Password are required.' });
+        }
+
+        if (password.length < 3) {
+          return sendJson(400, { error: 'Password must be at least 3 characters long.' });
+        }
+
+        const addResult = addUserToEnv(rootDir, userId, password);
+        if (!addResult.success) {
+          return sendJson(400, { error: addResult.error || 'Failed to add user.' });
+        }
+
+        // Save registeredName if provided
+        if (name) {
+          if (!db.users[userId]) {
+            db.users[userId] = { userId, registeredName: name };
+          } else {
+            db.users[userId].registeredName = name;
+          }
+        }
+
+        dbManager.recordSecurityEvent(
+          'Security event' as any,
+          admin.id,
+          admin.name,
+          'Admin Console',
+          '',
+          `Admin created user ${userId} (slot USER_${addResult.userIndex}) with SHA-256 hashed password saved to .env`
+        );
+        dbManager.save();
+
+        return sendJson(200, {
+          success: true,
+          message: `User ${userId} created and saved to .env with SHA-256 hash.`,
+          userIndex: addResult.userIndex,
+          userId,
+          name: name || 'Pending First Login',
+        });
       });
       return;
     }

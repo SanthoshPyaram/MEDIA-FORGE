@@ -16,6 +16,7 @@ import {
   FileText,
   FileSpreadsheet,
   LogOut,
+  Lock,
 } from 'lucide-react';
 import { getWorkspaceTheme, WORKSPACE_THEMES } from '@/lib/theme/workspaceThemes';
 
@@ -23,9 +24,10 @@ interface HeaderProps {
   currentView: string;
   onNavigate: (view: string) => void;
   onOpenQueue: () => void;
+  onOpenAuth?: (portal?: 'USER' | 'ADMIN') => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenQueue }) => {
+export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenQueue, onOpenAuth }) => {
   const { theme, setTheme } = useTheme();
   const { jobs } = useJobQueue();
   const { user, isAdmin, logout } = useAuth();
@@ -217,6 +219,28 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenQ
                 title="Logout of MediaForge"
               >
                 <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Unauthenticated: Sign In to Access & Admin Portal Triggers */}
+          {!user && (
+            <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-white/10">
+              <button
+                onClick={() => onOpenAuth?.('ADMIN')}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 dark:text-rose-400 text-xs font-bold transition-all cursor-pointer"
+                title="Administrator Control Portal"
+              >
+                <span>🛡️</span>
+                <span>Admin</span>
+              </button>
+
+              <button
+                onClick={() => onOpenAuth?.('USER')}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:brightness-110 active:scale-95 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Sign In to Access</span>
               </button>
             </div>
           )}

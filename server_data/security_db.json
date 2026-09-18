@@ -7,6 +7,10 @@
     "7287954409": {
       "userId": "7287954409",
       "registeredName": "pyaram santhosh reddy"
+    },
+    "9999999999": {
+      "userId": "9999999999",
+      "registeredName": "Auto Test User"
     }
   },
   "devices": {
@@ -48,9 +52,34 @@
       "submittedName": "pyaram santhosh reddy",
       "createdAt": "18 Sep 2026 03:20 PM",
       "lastLogin": "18 Sep 2026 03:24 PM"
+    },
+    "9999999999_new-user-phone-device": {
+      "deviceId": "new-user-phone-device",
+      "userId": "9999999999",
+      "friendlyName": "iPhone 15",
+      "deviceType": "Mobile",
+      "os": "iOS",
+      "browser": "Chrome",
+      "screen": "",
+      "status": "approved",
+      "submittedName": "Auto Test User",
+      "createdAt": "18 Sep 2026 04:29 PM",
+      "lastLogin": "18 Sep 2026 04:29 PM"
     }
   },
   "deviceRequests": [
+    {
+      "requestId": "req_ae6efb2a8e46",
+      "userId": "9999999999",
+      "name": "Auto Test User",
+      "deviceId": "new-user-phone-device",
+      "deviceType": "Mobile",
+      "operatingSystem": "iOS",
+      "browser": "Chrome",
+      "friendlyName": "iPhone 15",
+      "requestTime": "18 Sep 2026 04:29 PM",
+      "status": "approved"
+    },
     {
       "requestId": "req_dd6e17546a9e",
       "userId": "7287954409",
@@ -89,6 +118,54 @@
     }
   ],
   "loginHistory": [
+    {
+      "id": "log_9acca92edd14",
+      "time": "18 Sep 2026 04:29 PM",
+      "userId": "9999999999",
+      "name": "Auto Test User",
+      "device": "iPhone 15",
+      "browser": "Chrome",
+      "os": "iOS",
+      "deviceId": "new-user-phone-device",
+      "status": "SUCCESS",
+      "reason": "Approved Device"
+    },
+    {
+      "id": "log_fb916bf3976b",
+      "time": "18 Sep 2026 04:29 PM",
+      "userId": "9999999999",
+      "name": "Auto Test User",
+      "device": "iPhone 15",
+      "browser": "Chrome",
+      "os": "iOS",
+      "deviceId": "new-user-phone-device",
+      "status": "PENDING",
+      "reason": "Approval Requested"
+    },
+    {
+      "id": "log_9b8b6b0bff81",
+      "time": "18 Sep 2026 04:29 PM",
+      "userId": "9999999999",
+      "name": "Auto Test User",
+      "device": "iPhone 15",
+      "browser": "Chrome",
+      "os": "iOS",
+      "deviceId": "new-user-phone-device",
+      "status": "BLOCKED",
+      "reason": "New Device Approval Required"
+    },
+    {
+      "id": "log_1ac6f043b7d5",
+      "time": "18 Sep 2026 04:29 PM",
+      "userId": "24MIC7312",
+      "name": "Super Administrator",
+      "device": "Admin PC",
+      "browser": "Chrome",
+      "os": "Windows",
+      "deviceId": "test-admin-device",
+      "status": "SUCCESS",
+      "reason": "Admin Authentication"
+    },
     {
       "id": "log_1f6f6d1ff2fd",
       "time": "18 Sep 2026 03:24 PM",
@@ -307,6 +384,86 @@
     }
   ],
   "securityEvents": [
+    {
+      "id": "sec_03151edc140d",
+      "eventType": "Successful login",
+      "userId": "9999999999",
+      "name": "Auto Test User",
+      "device": "iPhone 15",
+      "deviceId": "new-user-phone-device",
+      "time": "18 Sep 2026 04:29 PM",
+      "details": "User entered application following device approval"
+    },
+    {
+      "id": "sec_46a5aa5617a0",
+      "eventType": "Device approved",
+      "userId": "9999999999",
+      "name": "Auto Test User",
+      "device": "iPhone 15",
+      "deviceId": "new-user-phone-device",
+      "time": "18 Sep 2026 04:29 PM",
+      "details": "Administrator confirmed approval for device iPhone 15 (Biometrically Verified via Fingerprint / Windows Hello)"
+    },
+    {
+      "id": "sec_19a428dfc43e",
+      "eventType": "Approval requested",
+      "userId": "9999999999",
+      "name": "Auto Test User",
+      "device": "iPhone 15",
+      "deviceId": "new-user-phone-device",
+      "time": "18 Sep 2026 04:29 PM",
+      "details": "Approval request created with ID: req_ae6efb2a8e46"
+    },
+    {
+      "id": "sec_5f810cc5a67b",
+      "eventType": "Name submitted",
+      "userId": "9999999999",
+      "name": "Auto Test User",
+      "device": "iPhone 15",
+      "deviceId": "new-user-phone-device",
+      "time": "18 Sep 2026 04:29 PM",
+      "details": "User entered display name: Auto Test User"
+    },
+    {
+      "id": "sec_9c5cc1319e1b",
+      "eventType": "Blocked login",
+      "userId": "9999999999",
+      "name": "Auto Test User",
+      "device": "iPhone 15",
+      "deviceId": "new-user-phone-device",
+      "time": "18 Sep 2026 04:29 PM",
+      "details": "New device requires administrator approval"
+    },
+    {
+      "id": "sec_95b5c75b67f9",
+      "eventType": "New device detected",
+      "userId": "9999999999",
+      "name": "Auto Test User",
+      "device": "iPhone 15",
+      "deviceId": "new-user-phone-device",
+      "time": "18 Sep 2026 04:29 PM",
+      "details": "New device detected for account 9999999999"
+    },
+    {
+      "id": "sec_d3fed8b60ffd",
+      "eventType": "Security event",
+      "userId": "24MIC7312",
+      "name": "Super Administrator",
+      "device": "Admin Console",
+      "deviceId": "Unknown",
+      "time": "18 Sep 2026 04:29 PM",
+      "details": "Admin created user 9999999999 (slot USER_6) with SHA-256 hashed password saved to .env"
+    },
+    {
+      "id": "sec_527f280d6843",
+      "eventType": "Successful login",
+      "userId": "24MIC7312",
+      "name": "Super Administrator",
+      "device": "Admin PC",
+      "deviceId": "test-admin-device",
+      "time": "18 Sep 2026 04:29 PM",
+      "details": "Administrator logged into security control center"
+    },
     {
       "id": "sec_57679162ece8",
       "eventType": "Logout",
@@ -669,7 +826,33 @@
       "os": "Windows 11/10",
       "browser": "Chrome",
       "loginTime": "18 Sep 2026 03:20 PM",
-      "lastActive": "18 Sep 2026 03:57 PM"
+      "lastActive": "18 Sep 2026 04:31 PM"
+    },
+    "4e80d74fc89b18ae9bb769e2702ab550ba84db5c84488da0adc1194c18226fbb": {
+      "token": "4e80d74fc89b18ae9bb769e2702ab550ba84db5c84488da0adc1194c18226fbb",
+      "userId": "24MIC7312",
+      "name": "Super Administrator",
+      "role": "admin",
+      "deviceId": "test-admin-device",
+      "deviceType": "Desktop",
+      "friendlyName": "Admin Workstation",
+      "os": "Windows",
+      "browser": "Chrome",
+      "loginTime": "18 Sep 2026 04:29 PM",
+      "lastActive": "18 Sep 2026 04:29 PM"
+    },
+    "a55e46e65b93a7be75a377d1ffcae296eaaed62b017e72109bc764678ad205d2": {
+      "token": "a55e46e65b93a7be75a377d1ffcae296eaaed62b017e72109bc764678ad205d2",
+      "userId": "9999999999",
+      "name": "Auto Test User",
+      "role": "user",
+      "deviceId": "new-user-phone-device",
+      "deviceType": "Mobile",
+      "friendlyName": "iPhone 15",
+      "os": "iOS",
+      "browser": "Chrome",
+      "loginTime": "18 Sep 2026 04:29 PM",
+      "lastActive": "18 Sep 2026 04:29 PM"
     }
   }
 }
