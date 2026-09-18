@@ -5,6 +5,7 @@
  */
 
 import { ClientDeviceInfo } from './deviceFingerprint';
+import { broadcastCloudEvent } from './cloudSync';
 
 declare const __MEDIAFORGE_AUTH_VAULT__: SecurityVaultConfig | undefined;
 
@@ -53,8 +54,8 @@ const DEFAULT_VAULT: SecurityVaultConfig = {
   },
 };
 
-const LOCAL_STORE_KEY = 'mediaforge_client_security_db_v2';
-const EXTRA_USERS_KEY = 'mediaforge_client_extra_users_v2';
+export const LOCAL_STORE_KEY = 'mediaforge_client_security_db_v2';
+export const EXTRA_USERS_KEY = 'mediaforge_client_extra_users_v2';
 
 export interface StoredDevice {
   deviceId: string;
@@ -82,7 +83,7 @@ export interface StoredDeviceRequest {
   status: 'pending' | 'approved' | 'rejected';
 }
 
-interface ClientSecurityDB {
+export interface ClientSecurityDB {
   devices: Record<string, StoredDevice>;
   deviceRequests: StoredDeviceRequest[];
   auditLogs: Array<{
@@ -131,7 +132,7 @@ export function getActiveVault(): SecurityVaultConfig {
   return baseVault;
 }
 
-function getLocalDB(): ClientSecurityDB {
+export function getLocalDB(): ClientSecurityDB {
   try {
     const raw = localStorage.getItem(LOCAL_STORE_KEY);
     if (raw) {
@@ -145,7 +146,7 @@ function getLocalDB(): ClientSecurityDB {
   };
 }
 
-function saveLocalDB(db: ClientSecurityDB) {
+export function saveLocalDB(db: ClientSecurityDB) {
   try {
     localStorage.setItem(LOCAL_STORE_KEY, JSON.stringify(db));
   } catch (e) {
@@ -317,6 +318,8 @@ export function requestDeviceApprovalInVault(
   const db = getLocalDB();
   const trimmedId = userId.trim();
   const trimmedName = name.trim();
+  const requestId = `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  const friendlyName = deviceInfo.friendlyName || `${deviceInfo.deviceType} (${deviceInfo.os})`;
 
   // Check if pending request exists
   const pending = db.deviceRequests.find(
@@ -325,14 +328,14 @@ export function requestDeviceApprovalInVault(
 
   if (!pending) {
     db.deviceRequests.unshift({
-      requestId: `req_${Date.now().toString(36)}`,
+      requestId,
       userId: trimmedId,
       name: trimmedName,
       deviceId,
       deviceType: deviceInfo.deviceType,
       operatingSystem: deviceInfo.os,
       browser: deviceInfo.browser,
-      friendlyName: deviceInfo.friendlyName,
+      friendlyName,
       requestTime: new Date().toLocaleString(),
       status: 'pending',
     });
@@ -344,7 +347,7 @@ export function requestDeviceApprovalInVault(
     db.devices[deviceKey] = {
       deviceId,
       userId: trimmedId,
-      friendlyName: deviceInfo.friendlyName,
+      friendlyName,
       deviceType: deviceInfo.deviceType,
       os: deviceInfo.os,
       browser: deviceInfo.browser,
@@ -357,6 +360,21 @@ export function requestDeviceApprovalInVault(
 
   saveLocalDB(db);
   logAuditEvent('DEVICE_APPROVAL_REQUESTED', trimmedId, deviceId, `Device approval requested by ${trimmedName}`, 'WARNING');
+
+  // Broadcast to cloud sync so admin dashboard on any device receives it instantly
+  broadcastCloudEvent({
+    type: 'DEVICE_REQUEST_CREATED',
+    requestId,
+    userId: trimmedId,
+    name: trimmedName,
+    deviceId,
+    deviceType: deviceInfo.deviceType,
+    operatingSystem: deviceInfo.os,
+    browser: deviceInfo.browser,
+    friendlyName,
+    requestTime: new Date().toLocaleString(),
+    status: 'pending',
+  }).catch(() => {});
 
   return {
     success: true,
@@ -420,6 +438,15 @@ export async function addVaultUser(userId: string, plainPass: string, name?: str
 
   localStorage.setItem(EXTRA_USERS_KEY, JSON.stringify(extraUsers));
   logAuditEvent('ADMIN_USER_CREATED', trimmedId, 'LOCAL', `User ${trimmedId} added to client vault`, 'SUCCESS');
+
+  // Broadcast user creation across the cloud
+  broadcastCloudEvent({
+    type: 'USER_CREATED',
+    userId: trimmedId,
+    passwordHash: hash,
+    name: name?.trim() || `User ${trimmedId}`,
+  }).catch(() => {});
+
   return { success: true, userId: trimmedId, passwordHash: hash };
 }
 
@@ -468,7 +495,61 @@ export function setVaultDeviceStatus(
 
   saveLocalDB(db);
   logAuditEvent('DEVICE_STATUS_CHANGED', userId, deviceId, `Device set to ${status}${passkey ? ' (Passkey 630211 Verified)' : ''}`, 'SUCCESS');
+
+  // Broadcast approval/status update across the cloud so user device activates immediately
+  broadcastCloudEvent({
+    type: 'DEVICE_STATUS_UPDATED',
+    userId,
+    deviceId,
+    status,
+    passkey,
+  }).catch(() => {});
+
   return { success: true, status };
+}
+
+/**
+ * Admin: Rename a device in client vault
+ */
+export function renameVaultDevice(userId: string, deviceId: string, friendlyName: string) {
+  const db = getLocalDB();
+  const deviceKey = `${userId.trim()}_${deviceId}`;
+  if (db.devices[deviceKey]) {
+    db.devices[deviceKey].friendlyName = friendlyName.trim();
+    saveLocalDB(db);
+  }
+
+  logAuditEvent('DEVICE_RENAMED', userId, deviceId, `Device renamed to "${friendlyName}"`, 'SUCCESS');
+
+  // Broadcast rename across cloud
+  broadcastCloudEvent({
+    type: 'DEVICE_RENAMED',
+    userId: userId.trim(),
+    deviceId,
+    friendlyName: friendlyName.trim(),
+  }).catch(() => {});
+
+  return { success: true };
+}
+
+/**
+ * Admin: Rename a user in client vault
+ */
+export function renameVaultUser(userId: string, newName: string) {
+  const trimmedId = userId.trim();
+  const trimmedName = newName.trim();
+  try {
+    let extraUsers: Record<string, any> = {};
+    const raw = localStorage.getItem(EXTRA_USERS_KEY);
+    if (raw) extraUsers = JSON.parse(raw);
+    if (extraUsers[trimmedId]) {
+      extraUsers[trimmedId].name = trimmedName;
+      localStorage.setItem(EXTRA_USERS_KEY, JSON.stringify(extraUsers));
+    }
+  } catch {}
+
+  logAuditEvent('USER_RENAMED', trimmedId, 'LOCAL', `User renamed to "${trimmedName}"`, 'SUCCESS');
+  return { success: true };
 }
 
 export function recordVaultSecurityEvent(

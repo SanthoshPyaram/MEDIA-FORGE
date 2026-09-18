@@ -32,7 +32,10 @@ import {
   getVaultAdminData,
   setVaultDeviceStatus,
   addVaultUser,
+  renameVaultDevice,
+  renameVaultUser,
 } from '@/utils/securityVault';
+import { subscribeToCloudSync } from '@/utils/cloudSync';
 
 interface OverviewSummary {
   totalUsers: number;
@@ -413,8 +416,12 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
 
   useEffect(() => {
     refreshAll();
-    const timer = setInterval(refreshAll, 12000);
-    return () => clearInterval(timer);
+    const unsubscribe = subscribeToCloudSync(() => {
+      refreshAll();
+    });
+    return () => {
+      unsubscribe();
+    };
   }, [refreshAll]);
 
   // -------------------------------------------------------------
@@ -650,9 +657,10 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
   const handleSaveRename = async () => {
     if (!token || !renameTarget || !newNameInput.trim()) return;
     try {
+      let serverHandled = false;
       if (!token.startsWith('vault_')) {
         if (renameTarget.isDevice) {
-          await fetch('/api/admin/devices/rename', {
+          const res = await fetch('/api/admin/devices/rename', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -664,8 +672,11 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
               friendlyName: newNameInput.trim(),
             }),
           });
+          if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
+            serverHandled = true;
+          }
         } else {
-          await fetch('/api/admin/users/rename', {
+          const res = await fetch('/api/admin/users/rename', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -676,8 +687,20 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
               name: newNameInput.trim(),
             }),
           });
+          if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
+            serverHandled = true;
+          }
         }
       }
+
+      if (!serverHandled) {
+        if (renameTarget.isDevice && renameTarget.deviceId) {
+          renameVaultDevice(renameTarget.userId, renameTarget.deviceId, newNameInput.trim());
+        } else {
+          renameVaultUser(renameTarget.userId, newNameInput.trim());
+        }
+      }
+
       setRenameTarget(null);
       setNewNameInput('');
       refreshAll();

@@ -18,6 +18,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { isBiometricSupported, verifyAdminBiometric } from '@/utils/biometricAuth';
+import { subscribeToCloudSync } from '@/utils/cloudSync';
 
 type GatewayScreen =
   | 'LOGIN'
@@ -210,6 +211,45 @@ export const SecurityGateway: React.FC<SecurityGatewayProps> = ({
     setErrorMessage(null);
     setStatusMessage(null);
   };
+
+  // Real-time automatic approval listener across all devices
+  useEffect(() => {
+    if (screen !== 'WAITING_APPROVAL' || !userId.trim()) return;
+
+    let isMounted = true;
+
+    const checkAndTransition = async () => {
+      try {
+        const res = await checkDeviceStatus(userId.trim());
+        if (!isMounted) return;
+        if (res.status === 'approved') {
+          resetFailedAttempts();
+          onSuccess?.();
+        } else if (res.status === 'rejected') {
+          setScreen('DEVICE_REJECTED');
+        } else if (res.status === 'revoked') {
+          setScreen('DEVICE_REVOKED');
+        }
+      } catch {}
+    };
+
+    // 1. Check immediately
+    checkAndTransition();
+
+    // 2. Subscribe to real-time cloud sync events
+    const unsubscribe = subscribeToCloudSync(() => {
+      checkAndTransition();
+    });
+
+    // 3. Fallback interval poll every 3s
+    const timer = setInterval(checkAndTransition, 3000);
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+      clearInterval(timer);
+    };
+  }, [screen, userId, checkDeviceStatus, resetFailedAttempts, onSuccess]);
 
   const isAdminPortal = portal === 'ADMIN';
 

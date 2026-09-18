@@ -51,7 +51,7 @@
       "status": "approved",
       "submittedName": "pyaram santhosh reddy",
       "createdAt": "18 Sep 2026 03:20 PM",
-      "lastLogin": "18 Sep 2026 03:24 PM"
+      "lastLogin": "18 Sep 2026 06:11 PM"
     },
     "9999999999_new-user-phone-device": {
       "deviceId": "new-user-phone-device",
@@ -118,6 +118,18 @@
     }
   ],
   "loginHistory": [
+    {
+      "id": "log_901eec9e322e",
+      "time": "18 Sep 2026 06:11 PM",
+      "userId": "7287954409",
+      "name": "pyaram santhosh reddy",
+      "device": "Windows Laptop",
+      "browser": "Chrome",
+      "os": "Windows 11/10",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "status": "SUCCESS",
+      "reason": "Approved Device"
+    },
     {
       "id": "log_9acca92edd14",
       "time": "18 Sep 2026 04:29 PM",
@@ -384,6 +396,26 @@
     }
   ],
   "securityEvents": [
+    {
+      "id": "sec_a8876174e8a2",
+      "eventType": "Logout",
+      "userId": "7287954409",
+      "name": "pyaram santhosh reddy",
+      "device": "Windows Laptop",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "time": "18 Sep 2026 06:11 PM",
+      "details": "User logged out of active session"
+    },
+    {
+      "id": "sec_a4c6f0a8f1be",
+      "eventType": "Successful login",
+      "userId": "7287954409",
+      "name": "pyaram santhosh reddy",
+      "device": "Windows Laptop",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "time": "18 Sep 2026 06:11 PM",
+      "details": "User logged in from trusted approved device"
+    },
     {
       "id": "sec_03151edc140d",
       "eventType": "Successful login",
@@ -826,7 +858,7 @@
       "os": "Windows 11/10",
       "browser": "Chrome",
       "loginTime": "18 Sep 2026 03:20 PM",
-      "lastActive": "18 Sep 2026 06:09 PM"
+      "lastActive": "18 Sep 2026 06:13 PM"
     },
     "4e80d74fc89b18ae9bb769e2702ab550ba84db5c84488da0adc1194c18226fbb": {
       "token": "4e80d74fc89b18ae9bb769e2702ab550ba84db5c84488da0adc1194c18226fbb",
