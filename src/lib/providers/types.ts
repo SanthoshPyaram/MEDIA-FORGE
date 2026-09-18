@@ -1,5 +1,6 @@
 export interface VideoSourceMetadata {
   title?: string;
+  author?: string;
   duration?: number;
   width?: number;
   height?: number;

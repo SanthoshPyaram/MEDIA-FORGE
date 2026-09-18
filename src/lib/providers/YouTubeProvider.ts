@@ -28,6 +28,7 @@ export class YouTubeProvider implements VideoSourceProvider {
         const data = await res.json();
         return {
           title: data.title,
+          author: data.author_name,
           thumbnailUrl: data.thumbnail_url,
           platform: 'youtube',
           platformType,
@@ -52,10 +53,9 @@ export class YouTubeProvider implements VideoSourceProvider {
 
     return {
       handled: true,
-      downloadable: false,
+      downloadable: true,
       badgeLabel,
-      message:
-        'This is a platform video page, not a direct video file. If you own this video or have permission to edit it, obtain the permitted video file and upload it here.',
+      message: 'Interactive Video Preview & Trimmer ready',
       platformUrl: url.trim(),
     };
   }

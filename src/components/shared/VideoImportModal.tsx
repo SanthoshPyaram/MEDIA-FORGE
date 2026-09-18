@@ -444,8 +444,40 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
       setUrlStatus(status);
       setUrlMetadata(meta);
 
+      const ytId = getYouTubeVideoId(trimmed);
+      const isShort = /shorts\//i.test(trimmed);
+
+      // Populate full interactive studio workspace & trimmer for YouTube, Shorts & web URLs
+      if (ytId || meta?.platform === 'youtube' || meta?.platform === 'instagram' || isDirectVideo(trimmed)) {
+        const title = meta?.title || (isShort ? 'YouTube Short' : 'YouTube Video');
+        const author = (meta as any)?.author || 'Content Creator';
+        const thumbnail = meta?.thumbnailUrl || (ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : '');
+
+        setVideoInfo({
+          success: true,
+          title,
+          author,
+          duration: meta?.duration || 60,
+          thumbnail,
+          isVertical: isShort,
+          qualities: [
+            { id: '1080p', label: '1080p Full HD', height: 1080, ext: 'mp4', type: 'video' },
+            { id: '720p', label: '720p HD', height: 720, ext: 'mp4', type: 'video' },
+            { id: '480p', label: '480p SD', height: 480, ext: 'mp4', type: 'video' },
+            { id: '360p', label: '360p Fast', height: 360, ext: 'mp4', type: 'video' },
+            { id: 'audio', label: 'MP3 High Quality Audio', height: 0, ext: 'mp3', type: 'audio' },
+          ],
+        });
+
+        if (ytId) {
+          setPlayerMode('embed');
+        } else {
+          setPlayerMode('native');
+        }
+      }
+
       // If provider can directly provide media (e.g. DirectMediaProvider)
-      if (status.downloadable) {
+      if (status.downloadable && isDirectVideo(trimmed)) {
         setDownloadProgress(0);
         const downloaded = await provider.getAuthorizedMedia(trimmed, (received, total) => {
           if (total > 0) {
