@@ -575,6 +575,131 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     }
   };
 
+  const INVIDIOUS_INSTANCES = [
+    'https://inv.nadeko.net',
+    'https://invidious.nerdvpn.de',
+    'https://invidious.privacydev.net',
+    'https://inv.tux.pizza',
+    'https://invidious.jing.rocks',
+  ];
+
+  const PIPED_INSTANCES = [
+    'https://pipedapi.kavin.rocks',
+    'https://api.piped.privacydev.net',
+    'https://pipedapi.tokhmi.xyz',
+  ];
+
+  // Helper to fetch media blob from direct URL, backend API, or stream instances
+  const resolveMediaBlob = async (
+    targetUrl: string,
+    targetQuality = '720p',
+    onProgress?: (msg: string) => void
+  ): Promise<{ blob: Blob; title?: string } | null> => {
+    const cleanUrl = targetUrl.trim();
+    if (!cleanUrl) return null;
+
+    // 1. Direct Video URL (.mp4, .mov, .webm, .mkv, etc.)
+    if (isDirectVideo(cleanUrl)) {
+      try {
+        onProgress?.('Fetching direct video stream in browser...');
+        const res = await fetch(cleanUrl);
+        if (res.ok) {
+          const blob = await res.blob();
+          return { blob };
+        }
+      } catch (e) {
+        console.warn('Direct media stream fetch error:', e);
+      }
+    }
+
+    // 2. Local Backend API (/api/download-video)
+    const isStaticHosting = typeof window !== 'undefined' && (
+      window.location.hostname.includes('github.io') ||
+      window.location.protocol === 'file:' ||
+      !window.location.port
+    );
+
+    if (!isStaticHosting) {
+      try {
+        onProgress?.('Requesting video from local server...');
+        const res = await fetch('/api/download-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: cleanUrl, quality: targetQuality }),
+        });
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (!contentType.includes('text/html')) {
+            const blob = await res.blob();
+            return { blob };
+          }
+        }
+      } catch (e) {
+        console.warn('Local API download error:', e);
+      }
+    }
+
+    // 3. YouTube stream resolver via public APIs
+    const ytId = getYouTubeVideoId(cleanUrl);
+    if (ytId) {
+      // Try Invidious instances
+      for (const inst of INVIDIOUS_INSTANCES) {
+        try {
+          onProgress?.(`Connecting to stream resolver (${inst.replace('https://', '')})...`);
+          const ctrl = new AbortController();
+          const timeout = setTimeout(() => ctrl.abort(), 3500);
+          const res = await fetch(`${inst}/api/v1/videos/${ytId}`, { signal: ctrl.signal });
+          clearTimeout(timeout);
+          if (res.ok) {
+            const data = await res.json();
+            const streams = data.formatStreams || [];
+            let selected = streams.find((s: any) => s.resolution?.includes(targetQuality) || s.qualityLabel?.includes(targetQuality));
+            if (!selected && streams.length > 0) {
+              selected = streams[0];
+            }
+            if (selected?.url) {
+              onProgress?.('Downloading video stream into browser...');
+              const streamRes = await fetch(selected.url);
+              if (streamRes.ok) {
+                const blob = await streamRes.blob();
+                return { blob, title: data.title };
+              }
+            }
+          }
+        } catch (e) {}
+      }
+
+      // Try Piped instances
+      for (const inst of PIPED_INSTANCES) {
+        try {
+          onProgress?.(`Connecting to stream resolver (${inst.replace('https://', '')})...`);
+          const ctrl = new AbortController();
+          const timeout = setTimeout(() => ctrl.abort(), 3500);
+          const res = await fetch(`${inst}/streams/${ytId}`, { signal: ctrl.signal });
+          clearTimeout(timeout);
+          if (res.ok) {
+            const data = await res.json();
+            const streams = data.videoStreams || [];
+            let selected = streams.find((s: any) => s.quality?.includes(targetQuality) && !s.videoOnly);
+            if (!selected) {
+              selected = streams.find((s: any) => !s.videoOnly) || streams[0];
+            }
+            if (selected?.url) {
+              onProgress?.('Downloading video stream into browser...');
+              const streamRes = await fetch(selected.url);
+              if (streamRes.ok) {
+                const blob = await streamRes.blob();
+                return { blob, title: data.title };
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
+    return null;
+  };
+
   // Download a single quality (without edits) directly in-browser
   const handleDownloadQuality = async (quality: QualityOption) => {
     if (downloadingQuality || isDownloadingAll || isProcessingEdit) return;
@@ -585,53 +710,39 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setUrlError(null);
 
     const cleanTitle = (videoInfo?.title || loadedLocalFile?.name || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
-    const ext = quality.type === 'audio' ? 'mp3' : 'mp4';
+    const isAudio = quality.type === 'audio';
+    const ext = isAudio ? 'mp3' : 'mp4';
     const filename = `${cleanTitle}_${quality.id}.${ext}`;
+
+    setBatchProgressText(`Fetching ${quality.label}...`);
 
     try {
       let sourceFile: File | null = loadedLocalFile;
 
-      const isStaticHosting = typeof window !== 'undefined' && (
-        window.location.hostname.includes('github.io') ||
-        window.location.protocol === 'file:' ||
-        !window.location.port
-      );
-
-      if (!sourceFile && !isStaticHosting && inputUrl.trim()) {
-        try {
-          const res = await fetch('/api/download-video', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: inputUrl.trim(), quality: quality.id }),
-          });
-
-          if (res.ok) {
-            const contentType = res.headers.get('content-type') || '';
-            if (!contentType.includes('text/html')) {
-              const blob = await res.blob();
-              triggerBrowserDownload(blob, filename);
-              setDownloadedQualities((prev) => ({ ...prev, [quality.id]: true }));
-              setBatchProgressText(`✓ Saved ${filename} to Downloads folder!`);
-              setTimeout(() => setBatchProgressText(null), 4000);
-              return;
-            }
+      // Try resolving stream directly
+      if (!sourceFile && inputUrl.trim()) {
+        const resolved = await resolveMediaBlob(inputUrl.trim(), quality.id, (msg) => setBatchProgressText(msg));
+        if (resolved?.blob) {
+          if (isAudio) {
+            const audioFile = new File([resolved.blob], `${cleanTitle}.mp4`, { type: resolved.blob.type || 'video/mp4' });
+            const res = await processAudio(
+              audioFile,
+              { outputFormat: 'mp3', bitrate: '320k' },
+              (p, stage) => setBatchProgressText(`${stage} (${p}%)`)
+            );
+            triggerBrowserDownload(res.blob, filename);
+          } else {
+            triggerBrowserDownload(resolved.blob, filename);
           }
-        } catch {}
-      }
-
-      // If direct media URL, fetch directly in browser
-      if (!sourceFile && inputUrl.trim() && isDirectVideo(inputUrl.trim())) {
-        try {
-          const directRes = await fetch(inputUrl.trim());
-          if (directRes.ok) {
-            const blob = await directRes.blob();
-            sourceFile = new File([blob], `${cleanTitle}.mp4`, { type: blob.type || 'video/mp4' });
-          }
-        } catch {}
+          setDownloadedQualities((prev) => ({ ...prev, [quality.id]: true }));
+          setBatchProgressText(`✓ Saved ${filename} to Downloads folder!`);
+          setTimeout(() => setBatchProgressText(null), 4000);
+          return;
+        }
       }
 
       if (sourceFile) {
-        if (quality.type === 'audio') {
+        if (isAudio) {
           const res = await processAudio(
             sourceFile,
             { outputFormat: 'mp3', bitrate: '320k' },
@@ -655,8 +766,8 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
         return;
       }
 
-      setBatchProgressText('Select or drop your video file to process and download directly!');
-      trimmerFileInputRef.current?.click();
+      setUrlError(`Direct download for ${quality.label} could not be completed from this stream. You can upload the video file directly below to convert.`);
+      setBatchProgressText(null);
     } catch (err: any) {
       setUrlError(`Unable to complete download for ${quality.label}`);
     } finally {
@@ -680,41 +791,16 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
         return;
       }
 
-      if (inputUrl.trim() && isDirectVideo(inputUrl.trim())) {
-        const directRes = await fetch(inputUrl.trim());
-        if (directRes.ok) {
-          const blob = await directRes.blob();
-          const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
+      if (inputUrl.trim()) {
+        const resolved = await resolveMediaBlob(inputUrl.trim(), quality.id);
+        if (resolved?.blob) {
+          const file = new File([resolved.blob], filename, { type: resolved.blob.type || 'video/mp4' });
           handleProcessLocalFile(file);
           return;
         }
       }
 
-      const isStaticHosting = typeof window !== 'undefined' && (
-        window.location.hostname.includes('github.io') ||
-        window.location.protocol === 'file:' ||
-        !window.location.port
-      );
-
-      if (!isStaticHosting && inputUrl.trim()) {
-        const res = await fetch('/api/download-video', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: inputUrl.trim(), quality: quality.id }),
-        });
-
-        if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (!contentType.includes('text/html')) {
-            const blob = await res.blob();
-            const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
-            handleProcessLocalFile(file);
-            return;
-          }
-        }
-      }
-
-      trimmerFileInputRef.current?.click();
+      setUrlError('Could not fetch stream into Studio automatically. Please choose a local file or direct MP4 URL.');
     } catch (err: any) {
       setUrlError(`Failed to load ${quality.label} into studio`);
     } finally {
@@ -803,50 +889,15 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     try {
       let sourceFile: File | null = loadedLocalFile;
 
-      const isStaticHosting = typeof window !== 'undefined' && (
-        window.location.hostname.includes('github.io') ||
-        window.location.protocol === 'file:' ||
-        !window.location.port
-      );
-
-      // 1. If backend API is available (non-static)
-      if (!sourceFile && !isStaticHosting && inputUrl.trim()) {
-        try {
-          const payload = await buildEditPayload(selectedTrimQuality);
-          const res = await fetch('/api/download-video', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-
-          if (res.ok) {
-            const contentType = res.headers.get('content-type') || '';
-            if (!contentType.includes('text/html')) {
-              const blob = await res.blob();
-              triggerBrowserDownload(blob, filename);
-              setEditProgressText(`✓ Saved ${filename} to Downloads folder!`);
-              setTimeout(() => setEditProgressText(null), 4000);
-              return;
-            }
-          }
-        } catch {}
-      }
-
-      // 2. Direct media URL fetch in browser
-      if (!sourceFile && inputUrl.trim() && isDirectVideo(inputUrl.trim())) {
-        try {
-          setEditProgressText('Fetching video stream in browser...');
-          const directRes = await fetch(inputUrl.trim());
-          if (directRes.ok) {
-            const blob = await directRes.blob();
-            sourceFile = new File([blob], `${cleanTitle}.mp4`, { type: blob.type || 'video/mp4' });
-          }
-        } catch (e) {
-          console.warn('Direct media fetch failed:', e);
+      // If no file loaded yet, resolve the stream automatically
+      if (!sourceFile && inputUrl.trim()) {
+        const resolved = await resolveMediaBlob(inputUrl.trim(), selectedTrimQuality, (msg) => setEditProgressText(msg));
+        if (resolved?.blob) {
+          sourceFile = new File([resolved.blob], `${cleanTitle}.mp4`, { type: resolved.blob.type || 'video/mp4' });
         }
       }
 
-      // 3. Process with In-Browser WebAssembly Engine
+      // Process with In-Browser WebAssembly Engine
       if (sourceFile) {
         const startSec = parseTimeToSeconds(trimStartStr);
         let endSec = parseTimeToSeconds(trimEndStr);
@@ -904,9 +955,8 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
         return;
       }
 
-      // If no file loaded yet, prompt user to select video file for in-browser trimming
-      setEditProgressText('Select or drop your video file to trim and download directly in-browser!');
-      trimmerFileInputRef.current?.click();
+      setUrlError('Direct stream download is blocked by platform CORS limits for this link. Please upload your video file directly below to trim and convert 100% in-browser.');
+      setEditProgressText(null);
     } catch (err: any) {
       console.error('Trimming failed:', err);
       setUrlError(err.message || 'Failed to process trimmed video in browser.');
@@ -930,41 +980,11 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     try {
       let sourceFile: File | null = loadedLocalFile;
 
-      const isStaticHosting = typeof window !== 'undefined' && (
-        window.location.hostname.includes('github.io') ||
-        window.location.protocol === 'file:' ||
-        !window.location.port
-      );
-
-      if (!sourceFile && !isStaticHosting && inputUrl.trim()) {
-        try {
-          const payload = await buildEditPayload('720p');
-          const res = await fetch('/api/download-video', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-
-          if (res.ok) {
-            const contentType = res.headers.get('content-type') || '';
-            if (!contentType.includes('text/html')) {
-              const blob = await res.blob();
-              const file = new File([blob], filename, { type: 'video/mp4' });
-              handleProcessLocalFile(file);
-              return;
-            }
-          }
-        } catch {}
-      }
-
-      if (!sourceFile && inputUrl.trim() && isDirectVideo(inputUrl.trim())) {
-        try {
-          const directRes = await fetch(inputUrl.trim());
-          if (directRes.ok) {
-            const blob = await directRes.blob();
-            sourceFile = new File([blob], `${cleanTitle}.mp4`, { type: blob.type || 'video/mp4' });
-          }
-        } catch {}
+      if (!sourceFile && inputUrl.trim()) {
+        const resolved = await resolveMediaBlob(inputUrl.trim(), '720p', (msg) => setEditProgressText(msg));
+        if (resolved?.blob) {
+          sourceFile = new File([resolved.blob], `${cleanTitle}.mp4`, { type: resolved.blob.type || 'video/mp4' });
+        }
       }
 
       if (sourceFile) {
@@ -991,7 +1011,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
         return;
       }
 
-      trimmerFileInputRef.current?.click();
+      setUrlError('Could not load edited clip into Studio automatically. Please choose a video file.');
     } catch (err: any) {
       setUrlError(err.message || 'Failed to load edited clip into Studio');
     } finally {
@@ -1239,6 +1259,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
                     className="flex-1 px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
                   />
                   <button
+                    id="check-url-btn"
                     onClick={handleCheckUrl}
                     disabled={!inputUrl.trim() || isCheckingUrl}
                     className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 text-white text-xs font-bold transition-all shrink-0 cursor-pointer shadow-md shadow-indigo-500/25 btn-pro-primary flex items-center gap-1.5"
@@ -1246,6 +1267,31 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
                     {isCheckingUrl && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                     <span>{isCheckingUrl ? 'Analyzing...' : 'Check & Preview'}</span>
                   </button>
+                </div>
+
+                {/* Quick Sample Direct Video URLs */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[10px] uppercase font-mono text-slate-400 font-bold">Quick Direct Video Samples:</span>
+                  {[
+                    { label: 'Big Buck Bunny (1080p)', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4' },
+                    { label: 'For Bigger Blazes (720p)', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4' },
+                    { label: 'Tears of Steel (4K)', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4' },
+                  ].map((s) => (
+                    <button
+                      key={s.label}
+                      type="button"
+                      onClick={() => {
+                        setInputUrl(s.url);
+                        setTimeout(() => {
+                          const btn = document.getElementById('check-url-btn');
+                          if (btn) (btn as HTMLButtonElement).click();
+                        }, 50);
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] font-semibold transition-colors cursor-pointer"
+                    >
+                      ⚡ {s.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
