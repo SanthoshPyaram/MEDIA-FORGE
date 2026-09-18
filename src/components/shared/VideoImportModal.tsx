@@ -330,7 +330,14 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     }
   }, [videoInfo]);
 
-  if (!isOpen) return null;
+  // Clean up local preview URL on change/unmount
+  useEffect(() => {
+    return () => {
+      if (localPreviewUrl) {
+        URL.revokeObjectURL(localPreviewUrl);
+      }
+    };
+  }, [localPreviewUrl]);
 
   const handleProcessLocalFile = (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase() || 'mp4';
@@ -405,14 +412,6 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
       handleSelectLocalFileForTrimming(file);
     }
   };
-
-  useEffect(() => {
-    return () => {
-      if (localPreviewUrl) {
-        URL.revokeObjectURL(localPreviewUrl);
-      }
-    };
-  }, [localPreviewUrl]);
 
   const formatDuration = (seconds: number) => {
     if (!seconds || isNaN(seconds)) return '';
@@ -1006,6 +1005,8 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
   const endSec = parseTimeToSeconds(trimEndStr);
   const rawClipDuration = Math.max(0, endSec - startSec);
   const effectiveClipDuration = limit1Min ? Math.min(rawClipDuration, 60) : rawClipDuration;
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in">
