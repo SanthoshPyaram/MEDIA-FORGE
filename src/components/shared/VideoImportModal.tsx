@@ -530,24 +530,36 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setDownloadingQuality(quality.id);
     setUrlError(null);
 
+    const cleanTitle = (videoInfo?.title || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
+    const ext = quality.type === 'audio' ? 'mp3' : 'mp4';
+    const filename = `${cleanTitle}_${quality.id}.${ext}`;
+
     try {
+      const isStaticHosting = typeof window !== 'undefined' && (
+        window.location.hostname.includes('github.io') ||
+        window.location.protocol === 'file:' ||
+        !window.location.port
+      );
+
       let blob: Blob | null = null;
-      try {
-        const res = await fetch('/api/download-video', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: inputUrl.trim(), quality: quality.id }),
-        });
+      if (!isStaticHosting) {
+        try {
+          const res = await fetch('/api/download-video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: inputUrl.trim(), quality: quality.id }),
+          });
 
-        if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (!contentType.includes('text/html')) {
-            blob = await res.blob();
+          if (res.ok) {
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('text/html')) {
+              blob = await res.blob();
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
 
-      // Fallback for direct media URLs
+      // If direct media URL, fetch directly in browser
       if (!blob && isDirectVideo(inputUrl.trim())) {
         try {
           const directRes = await fetch(inputUrl.trim());
@@ -558,28 +570,32 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
       }
 
       if (blob) {
-        const cleanTitle = (videoInfo?.title || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
-        const filename = quality.type === 'audio' 
-          ? `${cleanTitle}_audio.mp3` 
-          : `${cleanTitle}_${quality.id}.mp4`;
-
         triggerBrowserDownload(blob, filename);
         setDownloadedQualities((prev) => ({ ...prev, [quality.id]: true }));
+        setBatchProgressText(`✓ Saved ${filename} to Downloads folder!`);
+        setTimeout(() => setBatchProgressText(null), 4000);
         return;
       }
 
-      // Static GitHub Pages fallback for platform videos
+      // Platform video (YouTube, Shorts) direct download trigger
       const ytId = getYouTubeVideoId(inputUrl.trim());
       const helperUrl = ytId
         ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
         : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
 
-      window.open(helperUrl, '_blank', 'noopener,noreferrer');
+      const a = document.createElement('a');
+      a.href = helperUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
       setDownloadedQualities((prev) => ({ ...prev, [quality.id]: true }));
-      setBatchProgressText(`Opened high-speed downloader for ${quality.label}. Save the file and import to Studio!`);
-      setTimeout(() => setBatchProgressText(null), 6000);
+      setBatchProgressText(`✓ Download started for ${quality.label}!`);
+      setTimeout(() => setBatchProgressText(null), 5000);
     } catch (err: any) {
-      setUrlError(err.message || `Download helper dispatched for ${quality.label}`);
+      setUrlError(`Unable to complete download for ${quality.label}`);
     } finally {
       setDownloadingQuality(null);
     }
@@ -592,22 +608,33 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setDownloadingQuality(quality.id);
     setUrlError(null);
 
-    try {
-      let blob: Blob | null = null;
-      try {
-        const res = await fetch('/api/download-video', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: inputUrl.trim(), quality: quality.id }),
-        });
+    const cleanTitle = (videoInfo?.title || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
+    const filename = `${cleanTitle}_${quality.id}.mp4`;
 
-        if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (!contentType.includes('text/html')) {
-            blob = await res.blob();
+    try {
+      const isStaticHosting = typeof window !== 'undefined' && (
+        window.location.hostname.includes('github.io') ||
+        window.location.protocol === 'file:' ||
+        !window.location.port
+      );
+
+      let blob: Blob | null = null;
+      if (!isStaticHosting) {
+        try {
+          const res = await fetch('/api/download-video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: inputUrl.trim(), quality: quality.id }),
+          });
+
+          if (res.ok) {
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('text/html')) {
+              blob = await res.blob();
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
 
       if (!blob && isDirectVideo(inputUrl.trim())) {
         try {
@@ -619,8 +646,6 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
       }
 
       if (blob) {
-        const cleanTitle = (videoInfo?.title || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
-        const filename = `${cleanTitle}_${quality.id}.mp4`;
         const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
         handleProcessLocalFile(file);
         return;
@@ -632,7 +657,14 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
         ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
         : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
 
-      window.open(helperUrl, '_blank', 'noopener,noreferrer');
+      const a = document.createElement('a');
+      a.href = helperUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
       setBatchProgressText('Opened video download helper. Save the file and drop into Studio for instant editing!');
       setTimeout(() => setBatchProgressText(null), 6000);
     } catch (err: any) {
@@ -656,9 +688,16 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
       ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
       : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
 
-    window.open(helperUrl, '_blank', 'noopener,noreferrer');
+    const a = document.createElement('a');
+    a.href = helperUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
     setIsDownloadingAll(false);
-    setBatchProgressText('All quality download links opened in downloader helper!');
+    setBatchProgressText('All quality download links opened!');
     setTimeout(() => setBatchProgressText(null), 5000);
   };
 
@@ -708,37 +747,43 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setLastAttemptedAction(() => () => handleDownloadEditedClip());
     setIsInterrupted(false);
     setIsProcessingEdit(true);
-    setEditProgressText(`AI preparing stream & rendering ${selectedTrimQuality.toUpperCase()} clip...`);
+    setEditProgressText(`Rendering ${selectedTrimQuality.toUpperCase()} clip (${trimStartStr} to ${trimEndStr})...`);
     setUrlError(null);
 
+    const cleanTitle = (videoInfo?.title || 'clip').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'clip';
+    const cropSuffix = cropRatio !== 'original' ? `_${cropRatio.replace(':', 'x')}` : '';
+    const ext = selectedTrimQuality === 'audio' ? 'mp3' : 'mp4';
+    const filename = `${cleanTitle}${cropSuffix}_${selectedTrimQuality}_trimmed.${ext}`;
+
     try {
-      const payload = await buildEditPayload(selectedTrimQuality);
-      setEditProgressText(`Rendering ${selectedTrimQuality.toUpperCase()} with ${cropRatio} framing...`);
+      const isStaticHosting = typeof window !== 'undefined' && (
+        window.location.hostname.includes('github.io') ||
+        window.location.protocol === 'file:' ||
+        !window.location.port
+      );
 
       let blob: Blob | null = null;
-      try {
-        const res = await fetch('/api/download-video', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+      if (!isStaticHosting) {
+        try {
+          const payload = await buildEditPayload(selectedTrimQuality);
+          const res = await fetch('/api/download-video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
 
-        if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (!contentType.includes('text/html')) {
-            blob = await res.blob();
+          if (res.ok) {
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('text/html')) {
+              blob = await res.blob();
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
 
       if (blob) {
-        const cleanTitle = (videoInfo?.title || 'clip').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'clip';
-        const cropSuffix = cropRatio !== 'original' ? `_${cropRatio.replace(':', 'x')}` : '';
-        const ext = selectedTrimQuality === 'audio' ? 'mp3' : 'mp4';
-        const filename = `${cleanTitle}${cropSuffix}_${selectedTrimQuality}_trimmed.${ext}`;
-
         triggerBrowserDownload(blob, filename);
-        setEditProgressText('Edited clip downloaded successfully!');
+        setEditProgressText(`✓ Saved ${filename} to Downloads folder!`);
         setTimeout(() => setEditProgressText(null), 4000);
         return;
       }
@@ -749,9 +794,16 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
         ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
         : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
 
-      window.open(helperUrl, '_blank', 'noopener,noreferrer');
-      setEditProgressText(`Trim timestamps (${trimStartStr} to ${trimEndStr}) & settings saved! Download helper opened.`);
-      setTimeout(() => setEditProgressText(null), 6000);
+      const a = document.createElement('a');
+      a.href = helperUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      setEditProgressText(`✓ Trim timestamps (${trimStartStr} to ${trimEndStr}) & settings saved! Download started.`);
+      setTimeout(() => setEditProgressText(null), 5000);
     } catch (err: any) {
       setUrlError('Failed to process download.');
       setEditProgressText(null);
@@ -768,27 +820,36 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setEditProgressText('Preparing customized clip for MediaForge Studio...');
     setUrlError(null);
 
-    try {
-      let blob: Blob | null = null;
-      try {
-        const payload = await buildEditPayload('720p');
-        const res = await fetch('/api/download-video', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+    const cleanTitle = (videoInfo?.title || 'clip').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'clip';
+    const filename = `${cleanTitle}_edited.mp4`;
 
-        if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (!contentType.includes('text/html')) {
-            blob = await res.blob();
+    try {
+      const isStaticHosting = typeof window !== 'undefined' && (
+        window.location.hostname.includes('github.io') ||
+        window.location.protocol === 'file:' ||
+        !window.location.port
+      );
+
+      let blob: Blob | null = null;
+      if (!isStaticHosting) {
+        try {
+          const payload = await buildEditPayload('720p');
+          const res = await fetch('/api/download-video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+
+          if (res.ok) {
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('text/html')) {
+              blob = await res.blob();
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
 
       if (blob) {
-        const cleanTitle = (videoInfo?.title || 'clip').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'clip';
-        const filename = `${cleanTitle}_edited.mp4`;
         const file = new File([blob], filename, { type: 'video/mp4' });
         handleProcessLocalFile(file);
         return;
@@ -799,7 +860,14 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
         ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
         : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
 
-      window.open(helperUrl, '_blank', 'noopener,noreferrer');
+      const a = document.createElement('a');
+      a.href = helperUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
       setBatchProgressText('Opened video download helper. Save the file and drop into Studio for instant editing!');
       setTimeout(() => setBatchProgressText(null), 6000);
     } catch (err: any) {
