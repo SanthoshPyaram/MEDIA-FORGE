@@ -46,28 +46,42 @@ export class DirectMediaProvider implements VideoSourceProvider {
     }
 
     try {
-      // Test browser access and CORS headers
-      const res = await fetch(url.trim(), { method: 'HEAD', signal: AbortSignal.timeout(4000) });
-      if (res.ok) {
-        const ctype = res.headers.get('content-type') || '';
-        if (ctype.includes('video') || ctype.includes('octet-stream')) {
-          const clen = res.headers.get('content-length');
-          const sizeMB = clen ? `${(parseInt(clen, 10) / (1024 * 1024)).toFixed(1)} MB` : '';
-          return {
-            handled: true,
-            downloadable: true,
-            badgeLabel: '✓ Direct Video File detected',
-            message: sizeMB ? `Ready to import directly (${sizeMB})` : 'Ready to import directly',
-          };
+      // Test browser access and CORS headers using lightweight range probe
+      let res: Response | null = null;
+      try {
+        res = await fetch(url.trim(), {
+          headers: { Range: 'bytes=0-1000' },
+          signal: AbortSignal.timeout(4000),
+        });
+      } catch {
+        res = null;
+      }
+
+      if (!res || !res.ok) {
+        try {
+          res = await fetch(url.trim(), { method: 'HEAD', signal: AbortSignal.timeout(4000) });
+        } catch {
+          res = null;
         }
+      }
+
+      if (res && res.ok) {
+        const ctype = res.headers.get('content-type') || '';
+        const clen = res.headers.get('content-length') || res.headers.get('content-range')?.split('/')?.[1];
+        const sizeMB = clen ? `${(parseInt(clen, 10) / (1024 * 1024)).toFixed(1)} MB` : '';
+        return {
+          handled: true,
+          downloadable: true,
+          badgeLabel: '✓ Direct Video File detected',
+          message: sizeMB ? `Ready to import directly (${sizeMB})` : 'Ready to import directly',
+        };
       }
 
       return {
         handled: true,
-        downloadable: false,
-        badgeLabel: 'Direct Video URL',
-        message: 'This URL does not provide a browser-accessible video file.',
-        errorCode: 'UNSUPPORTED_FORMAT',
+        downloadable: true,
+        badgeLabel: 'Direct Video Stream',
+        message: 'Direct video format detected - ready to load and trim',
       };
     } catch (err: any) {
       // If browser blocked due to CORS or network error

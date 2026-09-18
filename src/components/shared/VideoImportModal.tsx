@@ -524,7 +524,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
               : new File([downloaded], meta?.title || 'imported_video.mp4', {
                   type: downloaded.type || 'video/mp4',
                 });
-          handleProcessLocalFile(file);
+          handleSelectLocalFileForTrimming(file);
           return;
         }
       }
@@ -1152,9 +1152,10 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
                   <span className="text-[10px] uppercase font-mono text-slate-400 font-bold">Quick Direct Video Samples:</span>
                   {[
-                    { label: 'Big Buck Bunny (1080p)', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4' },
-                    { label: 'For Bigger Blazes (720p)', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4' },
-                    { label: 'Tears of Steel (4K)', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4' },
+                    { label: 'Big Buck Bunny', url: 'https://raw.githubusercontent.com/mediaelement/mediaelement-files/master/big_buck_bunny.mp4' },
+                    { label: 'Oceans Life (HD)', url: 'https://vjs.zencdn.net/v/oceans.mp4' },
+                    { label: 'Echo Animation', url: 'https://raw.githubusercontent.com/mediaelement/mediaelement-files/master/echo-hereweare.mp4' },
+                    { label: 'Flower Close-up', url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4' },
                   ].map((s) => (
                     <button
                       key={s.label}
