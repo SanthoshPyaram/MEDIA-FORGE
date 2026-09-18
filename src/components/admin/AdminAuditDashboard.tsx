@@ -35,7 +35,7 @@ import {
   renameVaultDevice,
   renameVaultUser,
 } from '@/utils/securityVault';
-import { subscribeToCloudSync } from '@/utils/cloudSync';
+import { subscribeToCloudSync, pullCloudSyncEvents } from '@/utils/cloudSync';
 
 interface OverviewSummary {
   totalUsers: number;
@@ -283,6 +283,10 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
 
   const refreshAll = useCallback(async () => {
     setIsLoading(true);
+
+    try {
+      await pullCloudSyncEvents();
+    } catch {}
 
     let hasServerData = false;
     if (token && !token.startsWith('vault_')) {

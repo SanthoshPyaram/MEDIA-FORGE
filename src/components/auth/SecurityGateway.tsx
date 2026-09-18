@@ -18,7 +18,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { isBiometricSupported, verifyAdminBiometric } from '@/utils/biometricAuth';
-import { subscribeToCloudSync } from '@/utils/cloudSync';
+import { subscribeToCloudSync, pullCloudSyncEvents } from '@/utils/cloudSync';
 
 type GatewayScreen =
   | 'LOGIN'
@@ -192,6 +192,10 @@ export const SecurityGateway: React.FC<SecurityGatewayProps> = ({
     setIsCheckingStatus(true);
     setStatusMessage(null);
 
+    try {
+      await pullCloudSyncEvents();
+    } catch {}
+
     const res = await checkDeviceStatus(userId.trim());
     setIsCheckingStatus(false);
 
@@ -220,6 +224,7 @@ export const SecurityGateway: React.FC<SecurityGatewayProps> = ({
 
     const checkAndTransition = async () => {
       try {
+        await pullCloudSyncEvents();
         const res = await checkDeviceStatus(userId.trim());
         if (!isMounted) return;
         if (res.status === 'approved') {

@@ -175,8 +175,11 @@ export function applyCloudEventToLocalDB(event: CloudSyncEvent): boolean {
  */
 export async function pullCloudSyncEvents(): Promise<boolean> {
   try {
-    const res = await fetch(`${NTFY_BASE_URL}/${CLOUD_SYNC_TOPIC}/json?poll=1`, {
+    const res = await fetch(`${NTFY_BASE_URL}/${CLOUD_SYNC_TOPIC}/json?poll=1&since=all&_t=${Date.now()}`, {
       method: 'GET',
+      headers: {
+        'Cache-Control': 'no-cache',
+      },
     });
     if (!res.ok) return false;
 
@@ -211,18 +214,18 @@ export async function pullCloudSyncEvents(): Promise<boolean> {
 export function subscribeToCloudSync(onSyncUpdated: () => void): () => void {
   let isCancelled = false;
   let eventSource: EventSource | null = null;
-  let pollInterval: NodeJS.Timeout | null = null;
+  let pollInterval: any = null;
 
   // 1. Initial Pull
   pullCloudSyncEvents().then((changed) => {
-    if (changed && !isCancelled) {
+    if (!isCancelled) {
       onSyncUpdated();
     }
   });
 
   // 2. Try EventSource SSE for instant real-time pushes
   try {
-    eventSource = new EventSource(`${NTFY_BASE_URL}/${CLOUD_SYNC_TOPIC}/sse`);
+    eventSource = new EventSource(`${NTFY_BASE_URL}/${CLOUD_SYNC_TOPIC}/sse?since=all`);
 
     eventSource.onmessage = (e) => {
       if (isCancelled || !e.data) return;
@@ -243,14 +246,14 @@ export function subscribeToCloudSync(onSyncUpdated: () => void): () => void {
     };
   } catch {}
 
-  // 3. Robust backup interval polling (every 3.5 seconds)
+  // 3. Robust backup interval polling (every 2.5 seconds)
   pollInterval = setInterval(async () => {
     if (isCancelled) return;
     const changed = await pullCloudSyncEvents();
     if (changed && !isCancelled) {
       onSyncUpdated();
     }
-  }, 3500);
+  }, 2500);
 
   return () => {
     isCancelled = true;
@@ -264,3 +267,4 @@ export function subscribeToCloudSync(onSyncUpdated: () => void): () => void {
     }
   };
 }
+
