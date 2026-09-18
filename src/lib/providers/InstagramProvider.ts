@@ -35,7 +35,7 @@ export class InstagramProvider implements VideoSourceProvider {
       downloadable: false,
       badgeLabel,
       message:
-        'This platform URL does not provide an authorized downloadable video file to this application.',
+        'Preview available. To edit or export this video, use a video file that you own or are authorized to download and process.',
       platformUrl: url.trim(),
     };
   }

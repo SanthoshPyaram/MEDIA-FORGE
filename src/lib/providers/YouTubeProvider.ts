@@ -53,9 +53,10 @@ export class YouTubeProvider implements VideoSourceProvider {
 
     return {
       handled: true,
-      downloadable: true,
+      downloadable: false,
       badgeLabel,
-      message: 'Interactive Video Preview & Trimmer ready',
+      message:
+        'Preview available. To edit or export this video, use a video file that you own or are authorized to download and process.',
       platformUrl: url.trim(),
     };
   }

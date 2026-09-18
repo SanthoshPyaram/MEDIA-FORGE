@@ -371,24 +371,58 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     }
   };
 
-  const handleSelectLocalFileForTrimming = (file: File) => {
-    setLoadedLocalFile(file);
+  // Reusable Blob Download with validation
+  const downloadBlob = (blob: Blob, filename: string) => {
+    if (!blob || blob.size === 0) {
+      throw new Error('Cannot download empty or non-existent video output.');
+    }
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 1000);
+  };
+
+  // Reusable contract: load a genuine File or Blob into the editor pipeline
+  const loadVideoFile = (file: File | Blob, customTitle?: string) => {
+    if (!file || file.size === 0) return;
+    const fileName = customTitle || (file instanceof File ? file.name : 'video.mp4');
+    const fileObj = file instanceof File ? file : new File([file], fileName, { type: file.type || 'video/mp4' });
+
+    setLoadedLocalFile(fileObj);
     if (localPreviewUrl) {
       URL.revokeObjectURL(localPreviewUrl);
     }
-    const url = URL.createObjectURL(file);
-    setLocalPreviewUrl(url);
+    const objectUrl = URL.createObjectURL(fileObj);
+    setLocalPreviewUrl(objectUrl);
     setPlayerMode('native');
 
-    // Probe video metadata
+    if ((import.meta as any).env?.DEV) {
+      console.log({
+        sourceUrl: fileName,
+        sourceType: 'EditableVideoFile',
+        mediaUrl: objectUrl,
+        mediaType: fileObj.type,
+        downloadUrl: null,
+        blobType: fileObj.type,
+        blobSize: fileObj.size,
+      });
+    }
+
+    // Probe video metadata directly from local media stream
     const tempVideo = document.createElement('video');
     tempVideo.preload = 'metadata';
-    tempVideo.src = url;
+    tempVideo.src = objectUrl;
     tempVideo.onloadedmetadata = () => {
       const dur = Math.round(tempVideo.duration) || 60;
       setVideoInfo({
         success: true,
-        title: file.name.replace(/\.[^/.]+$/, ''),
+        title: fileName.replace(/\.[^/.]+$/, ''),
         author: 'Local Video File',
         duration: dur,
         thumbnail: '',
@@ -406,10 +440,14 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     };
   };
 
+  const handleSelectLocalFileForTrimming = (file: File) => {
+    loadVideoFile(file);
+  };
+
   const handleTrimmerFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      handleSelectLocalFileForTrimming(file);
+      loadVideoFile(file);
     }
   };
 
@@ -438,17 +476,6 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   }
 
-  const triggerBrowserDownload = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 15000);
-  };
-
   // URL Tab: Check and handle URL
   const handleCheckUrl = async () => {
     const trimmed = inputUrl.trim();
@@ -460,7 +487,12 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setUrlMetadata(null);
     setVideoInfo(null);
     setDownloadedQualities({});
-    // Provider resolution (YouTube oEmbed / DirectMedia / Instagram)
+    setLoadedLocalFile(null);
+    if (localPreviewUrl) {
+      URL.revokeObjectURL(localPreviewUrl);
+      setLocalPreviewUrl(null);
+    }
+
     const provider = findProviderForUrl(trimmed);
     if (!provider) {
       setIsCheckingUrl(false);
@@ -479,7 +511,19 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
       const ytId = getYouTubeVideoId(trimmed);
       const isShort = /shorts\//i.test(trimmed);
 
-      // Populate full interactive studio workspace & trimmer for YouTube, Shorts & web URLs
+      if ((import.meta as any).env?.DEV) {
+        console.log({
+          sourceUrl: trimmed,
+          sourceType: ytId ? 'YouTubePreviewSource' : isDirectVideo(trimmed) ? 'DirectMediaURL' : 'PlatformSource',
+          mediaUrl: isDirectVideo(trimmed) ? trimmed : null,
+          mediaType: isDirectVideo(trimmed) ? 'video/mp4' : null,
+          downloadUrl: null,
+          blobType: null,
+          blobSize: 0,
+        });
+      }
+
+      // Populate interactive preview for YouTube / Instagram / Direct
       if (ytId || meta?.platform === 'youtube' || meta?.platform === 'instagram' || isDirectVideo(trimmed)) {
         const title = meta?.title || (isShort ? 'YouTube Short' : 'YouTube Video');
         const author = (meta as any)?.author || 'Content Creator';
@@ -508,7 +552,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
         }
       }
 
-      // If provider can directly provide media (e.g. DirectMediaProvider)
+      // Direct Video URL: fetch authorized media file if CORS permits
       if (status.downloadable && isDirectVideo(trimmed)) {
         setDownloadProgress(0);
         const downloaded = await provider.getAuthorizedMedia(trimmed, (received, total) => {
@@ -524,7 +568,8 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
               : new File([downloaded], meta?.title || 'imported_video.mp4', {
                   type: downloaded.type || 'video/mp4',
                 });
-          handleSelectLocalFileForTrimming(file);
+          loadVideoFile(file);
+          setDownloadProgress(null);
           return;
         }
       }
@@ -582,6 +627,13 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
   // Download a single quality (without edits) directly in-browser
   const handleDownloadQuality = async (quality: QualityOption) => {
     if (downloadingQuality || isDownloadingAll || isProcessingEdit) return;
+
+    if (!loadedLocalFile) {
+      setUrlError("Preview is available, but to export this quality, please upload the video file.");
+      trimmerFileInputRef.current?.click();
+      return;
+    }
+
     requestWakeLock();
     setLastAttemptedAction(() => () => handleDownloadQuality(quality));
     setIsInterrupted(false);
@@ -593,62 +645,40 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     const ext = isAudio ? 'mp3' : 'mp4';
     const filename = `${cleanTitle}_${quality.id}.${ext}`;
 
-    setBatchProgressText(`Fetching ${quality.label}...`);
+    setBatchProgressText(`Processing ${quality.label}...`);
 
     try {
-      let sourceFile: File | null = loadedLocalFile;
-
-      // Try resolving stream directly
-      if (!sourceFile && inputUrl.trim()) {
-        const resolved = await resolveMediaBlob(inputUrl.trim(), quality.id, (msg) => setBatchProgressText(msg));
-        if (resolved?.blob) {
-          if (isAudio) {
-            const audioFile = new File([resolved.blob], `${cleanTitle}.mp4`, { type: resolved.blob.type || 'video/mp4' });
-            const res = await processAudio(
-              audioFile,
-              { outputFormat: 'mp3', bitrate: '320k' },
-              (p, stage) => setBatchProgressText(`${stage} (${p}%)`)
-            );
-            triggerBrowserDownload(res.blob, filename);
-          } else {
-            triggerBrowserDownload(resolved.blob, filename);
-          }
-          setDownloadedQualities((prev) => ({ ...prev, [quality.id]: true }));
-          setBatchProgressText(`✓ Saved ${filename} to Downloads folder!`);
-          setTimeout(() => setBatchProgressText(null), 4000);
-          return;
+      const sourceFile = loadedLocalFile;
+      if (isAudio) {
+        const res = await processAudio(
+          sourceFile,
+          { outputFormat: 'mp3', bitrate: '320k' },
+          (p, stage) => setBatchProgressText(`${stage} (${p}%)`)
+        );
+        if (!res?.blob || res.blob.size === 0) {
+          throw new Error('No audio output was generated.');
         }
+        downloadBlob(res.blob, filename);
+      } else {
+        const res = await processVideo(
+          sourceFile,
+          {
+            outputFormat: 'mp4',
+            resolution: quality.id === '1080p' || quality.id === '720p' || quality.id === '480p' || quality.id === '360p' ? quality.id : '720p',
+          },
+          (p, stage) => setBatchProgressText(`${stage} (${p}%)`)
+        );
+        if (!res?.blob || res.blob.size === 0) {
+          throw new Error('No video output was generated.');
+        }
+        downloadBlob(res.blob, filename);
       }
 
-      if (sourceFile) {
-        if (isAudio) {
-          const res = await processAudio(
-            sourceFile,
-            { outputFormat: 'mp3', bitrate: '320k' },
-            (p, stage) => setBatchProgressText(`${stage} (${p}%)`)
-          );
-          triggerBrowserDownload(res.blob, filename);
-        } else {
-          const res = await processVideo(
-            sourceFile,
-            {
-              outputFormat: 'mp4',
-              resolution: quality.id === '1080p' || quality.id === '720p' || quality.id === '480p' || quality.id === '360p' ? quality.id : '720p',
-            },
-            (p, stage) => setBatchProgressText(`${stage} (${p}%)`)
-          );
-          triggerBrowserDownload(res.blob, filename);
-        }
-        setDownloadedQualities((prev) => ({ ...prev, [quality.id]: true }));
-        setBatchProgressText(`✓ Saved ${filename} to Downloads folder!`);
-        setTimeout(() => setBatchProgressText(null), 4000);
-        return;
-      }
-
-      setUrlError(`Direct download for ${quality.label} could not be completed from this stream. You can upload the video file directly below to convert.`);
-      setBatchProgressText(null);
+      setDownloadedQualities((prev) => ({ ...prev, [quality.id]: true }));
+      setBatchProgressText(`✓ Saved ${filename} to Downloads folder!`);
+      setTimeout(() => setBatchProgressText(null), 4000);
     } catch (err: any) {
-      setUrlError(`Unable to complete download for ${quality.label}`);
+      setUrlError(`Unable to complete export for ${quality.label}: ${err.message}`);
     } finally {
       setDownloadingQuality(null);
     }
@@ -657,29 +687,19 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
   // Open a specific untouched quality in Studio
   const handleOpenInStudio = async (quality: QualityOption) => {
     if (downloadingQuality || isDownloadingAll || isProcessingEdit) return;
+
+    if (!loadedLocalFile) {
+      setUrlError('Please load or upload the video file to open in Studio.');
+      trimmerFileInputRef.current?.click();
+      return;
+    }
+
     requestWakeLock();
     setDownloadingQuality(quality.id);
     setUrlError(null);
 
-    const cleanTitle = (videoInfo?.title || loadedLocalFile?.name || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
-    const filename = `${cleanTitle}_${quality.id}.mp4`;
-
     try {
-      if (loadedLocalFile) {
-        handleProcessLocalFile(loadedLocalFile);
-        return;
-      }
-
-      if (inputUrl.trim()) {
-        const resolved = await resolveMediaBlob(inputUrl.trim(), quality.id);
-        if (resolved?.blob) {
-          const file = new File([resolved.blob], filename, { type: resolved.blob.type || 'video/mp4' });
-          handleProcessLocalFile(file);
-          return;
-        }
-      }
-
-      setUrlError('Could not fetch stream into Studio automatically. Please choose a local file or direct MP4 URL.');
+      handleProcessLocalFile(loadedLocalFile);
     } catch (err: any) {
       setUrlError(`Failed to load ${quality.label} into studio`);
     } finally {
@@ -690,6 +710,13 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
   // Download ALL available qualities sequentially
   const handleDownloadAllQualities = async () => {
     if (!videoInfo?.qualities || isDownloadingAll || downloadingQuality || isProcessingEdit) return;
+
+    if (!loadedLocalFile) {
+      setUrlError("Preview is available, but to download all qualities, please upload the video file.");
+      trimmerFileInputRef.current?.click();
+      return;
+    }
+
     requestWakeLock();
     setLastAttemptedAction(() => () => handleDownloadAllQualities());
     setIsInterrupted(false);
@@ -698,7 +725,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
 
     try {
       for (const q of videoInfo.qualities) {
-        setBatchProgressText(`Downloading ${q.label}...`);
+        setBatchProgressText(`Processing ${q.label}...`);
         await handleDownloadQuality(q);
       }
       setBatchProgressText('✓ All qualities processed directly to your Downloads folder!');
@@ -752,6 +779,13 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
   // ⚡ Download Edited Clip in Selected Quality (Direct in-browser download)
   const handleDownloadEditedClip = async () => {
     if (isProcessingEdit || downloadingQuality || isDownloadingAll) return;
+
+    if (!loadedLocalFile) {
+      setUrlError("Preview is available, but to edit and download, please upload or select the authorized video file.");
+      trimmerFileInputRef.current?.click();
+      return;
+    }
+
     requestWakeLock();
     setLastAttemptedAction(() => () => handleDownloadEditedClip());
     setIsInterrupted(false);
@@ -766,76 +800,71 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setEditProgressText(`Preparing ${selectedTrimQuality.toUpperCase()} clip (${trimStartStr} to ${trimEndStr})...`);
 
     try {
-      let sourceFile: File | null = loadedLocalFile;
-
-      // If no file loaded yet, resolve the stream automatically
-      if (!sourceFile && inputUrl.trim()) {
-        const resolved = await resolveMediaBlob(inputUrl.trim(), selectedTrimQuality, (msg) => setEditProgressText(msg));
-        if (resolved?.blob) {
-          sourceFile = new File([resolved.blob], `${cleanTitle}.mp4`, { type: resolved.blob.type || 'video/mp4' });
-        }
+      const sourceFile = loadedLocalFile;
+      const startSec = parseTimeToSeconds(trimStartStr);
+      let endSec = parseTimeToSeconds(trimEndStr);
+      if (endSec <= startSec) endSec = startSec + 60;
+      if (limit1Min && endSec - startSec > 60) {
+        endSec = startSec + 60;
       }
 
-      // Process with In-Browser WebAssembly Engine
-      if (sourceFile) {
-        const startSec = parseTimeToSeconds(trimStartStr);
-        let endSec = parseTimeToSeconds(trimEndStr);
-        if (endSec <= startSec) endSec = startSec + 60;
-        if (limit1Min && endSec - startSec > 60) {
-          endSec = startSec + 60;
-        }
-
-        if (isAudioOnly) {
-          setEditProgressText('Extracting and trimming audio track in-browser...');
-          const audioResult = await processAudio(
-            sourceFile,
-            {
-              outputFormat: 'mp3',
-              bitrate: '320k',
-              trim: { start: startSec, end: endSec },
-            },
-            (p, stage) => setEditProgressText(`${stage} (${p}%)`)
-          );
-          triggerBrowserDownload(audioResult.blob, filename);
-          setEditProgressText(`✓ Saved ${filename} to your Downloads folder!`);
-          setTimeout(() => setEditProgressText(null), 4000);
-          return;
-        }
-
-        setEditProgressText('Loading video engine & trimming clip in-browser...');
-        const result = await processVideo(
+      if (isAudioOnly) {
+        setEditProgressText('Extracting and trimming audio track in-browser...');
+        const audioResult = await processAudio(
           sourceFile,
           {
-            outputFormat: 'mp4',
-            resolution: selectedTrimQuality === '1080p' || selectedTrimQuality === '720p' || selectedTrimQuality === '480p' || selectedTrimQuality === '360p'
-              ? selectedTrimQuality
-              : '720p',
+            outputFormat: 'mp3',
+            bitrate: '320k',
             trim: { start: startSec, end: endSec },
-            muteAudio: isMuteAudio,
-            customAudio: customAudioFile ? {
-              enabled: true,
-              file: customAudioFile,
-              mode: 'replace',
-            } : undefined,
-            watermark: isWatermarkEnabled && watermarkText.trim() ? {
-              enabled: true,
-              type: 'text',
-              text: watermarkText.trim(),
-              position: watermarkPos,
-              opacity: 0.85,
-            } : undefined,
           },
           (p, stage) => setEditProgressText(`${stage} (${p}%)`)
         );
 
-        triggerBrowserDownload(result.blob, filename);
-        setEditProgressText(`✓ Successfully saved ${filename} to your Downloads folder!`);
-        setTimeout(() => setEditProgressText(null), 5000);
+        if (!audioResult?.blob || audioResult.blob.size === 0) {
+          throw new Error('No audio output was generated.');
+        }
+
+        const sizeMB = (audioResult.blob.size / (1024 * 1024)).toFixed(1);
+        setEditProgressText(`✓ Audio ready (${sizeMB} MB, MP3). Saving to Downloads folder...`);
+        downloadBlob(audioResult.blob, filename);
+        setTimeout(() => setEditProgressText(null), 4000);
         return;
       }
 
-      setUrlError('Direct stream download is blocked by platform CORS limits for this link. Please upload your video file directly below to trim and convert 100% in-browser.');
-      setEditProgressText(null);
+      setEditProgressText('Processing video with FFmpeg WebAssembly engine in-browser...');
+      const result = await processVideo(
+        sourceFile,
+        {
+          outputFormat: 'mp4',
+          resolution: selectedTrimQuality === '1080p' || selectedTrimQuality === '720p' || selectedTrimQuality === '480p' || selectedTrimQuality === '360p'
+            ? selectedTrimQuality
+            : '720p',
+          trim: { start: startSec, end: endSec },
+          muteAudio: isMuteAudio,
+          customAudio: customAudioFile ? {
+            enabled: true,
+            file: customAudioFile,
+            mode: 'replace',
+          } : undefined,
+          watermark: isWatermarkEnabled && watermarkText.trim() ? {
+            enabled: true,
+            type: 'text',
+            text: watermarkText.trim(),
+            position: watermarkPos,
+            opacity: 0.85,
+          } : undefined,
+        },
+        (p, stage) => setEditProgressText(`${stage} (${p}%)`)
+      );
+
+      if (!result?.blob || result.blob.size === 0) {
+        throw new Error('No video output was generated.');
+      }
+
+      const sizeMB = (result.blob.size / (1024 * 1024)).toFixed(1);
+      setEditProgressText(`✓ Video ready (${sizeMB} MB, MP4). Saving to Downloads folder...`);
+      downloadBlob(result.blob, filename);
+      setTimeout(() => setEditProgressText(null), 4000);
     } catch (err: any) {
       console.error('Trimming failed:', err);
       setUrlError(err.message || 'Failed to process trimmed video in browser.');
@@ -848,6 +877,13 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
   // 🎬 Open in Studio with Edits Applied
   const handleOpenInStudioWithEdits = async () => {
     if (isProcessingEdit || downloadingQuality || isDownloadingAll) return;
+
+    if (!loadedLocalFile) {
+      setUrlError('Please load or upload the video file to open in Studio.');
+      trimmerFileInputRef.current?.click();
+      return;
+    }
+
     requestWakeLock();
     setIsProcessingEdit(true);
     setEditProgressText('Preparing customized clip for MediaForge Studio...');
@@ -857,40 +893,27 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     const filename = `${cleanTitle}_edited.mp4`;
 
     try {
-      let sourceFile: File | null = loadedLocalFile;
-
-      if (!sourceFile && inputUrl.trim()) {
-        const resolved = await resolveMediaBlob(inputUrl.trim(), '720p', (msg) => setEditProgressText(msg));
-        if (resolved?.blob) {
-          sourceFile = new File([resolved.blob], `${cleanTitle}.mp4`, { type: resolved.blob.type || 'video/mp4' });
-        }
+      const sourceFile = loadedLocalFile;
+      const startSec = parseTimeToSeconds(trimStartStr);
+      let endSec = parseTimeToSeconds(trimEndStr);
+      if (endSec <= startSec) endSec = startSec + 60;
+      if (limit1Min && endSec - startSec > 60) {
+        endSec = startSec + 60;
       }
 
-      if (sourceFile) {
-        const startSec = parseTimeToSeconds(trimStartStr);
-        let endSec = parseTimeToSeconds(trimEndStr);
-        if (endSec <= startSec) endSec = startSec + 60;
-        if (limit1Min && endSec - startSec > 60) {
-          endSec = startSec + 60;
-        }
+      const res = await processVideo(
+        sourceFile,
+        {
+          outputFormat: 'mp4',
+          resolution: '720p',
+          trim: { start: startSec, end: endSec },
+          muteAudio: isMuteAudio,
+        },
+        (p, stage) => setEditProgressText(`${stage} (${p}%)`)
+      );
 
-        const res = await processVideo(
-          sourceFile,
-          {
-            outputFormat: 'mp4',
-            resolution: '720p',
-            trim: { start: startSec, end: endSec },
-            muteAudio: isMuteAudio,
-          },
-          (p, stage) => setEditProgressText(`${stage} (${p}%)`)
-        );
-
-        const file = new File([res.blob], filename, { type: 'video/mp4' });
-        handleProcessLocalFile(file);
-        return;
-      }
-
-      setUrlError('Could not load edited clip into Studio automatically. Please choose a video file.');
+      const file = new File([res.blob], filename, { type: 'video/mp4' });
+      handleProcessLocalFile(file);
     } catch (err: any) {
       setUrlError(err.message || 'Failed to load edited clip into Studio');
     } finally {
@@ -1613,14 +1636,24 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
                             type="button"
                             onClick={handleDownloadEditedClip}
                             disabled={isProcessingEdit}
-                            className="w-full sm:flex-1 py-3.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold shadow-md shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 btn-pro-primary"
+                            className={`w-full sm:flex-1 py-3.5 px-4 rounded-xl text-white text-xs font-bold shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 ${
+                              loadedLocalFile
+                                ? 'bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 hover:from-indigo-500 hover:to-violet-500 shadow-indigo-600/30 btn-pro-primary'
+                                : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/20'
+                            }`}
                           >
                             {isProcessingEdit ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
+                            ) : loadedLocalFile ? (
                               <Download className="w-4 h-4" />
+                            ) : (
+                              <Upload className="w-4 h-4" />
                             )}
-                            <span>⚡ Download Trimmed Video ({selectedTrimQuality.toUpperCase()} • {effectiveClipDuration}s)</span>
+                            <span>
+                              {loadedLocalFile
+                                ? `⚡ Download Trimmed Video (${selectedTrimQuality.toUpperCase()} • ${effectiveClipDuration}s)`
+                                : `📁 Upload Video File to Export (${selectedTrimQuality.toUpperCase()} • ${effectiveClipDuration}s)`}
+                            </span>
                           </button>
 
                           <button
@@ -1636,6 +1669,52 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
                       </div>
                     )}
                   </div>
+
+                  {/* Platform Detection Guidance Box (YouTube / Instagram / Preview sources without loaded file) */}
+                  {urlStatus && !loadedLocalFile && (
+                    <div className="p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/70 space-y-3 animate-fade-in">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-indigo-600/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs shrink-0">
+                          <Info className="w-4 h-4" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200">
+                            {urlStatus.badgeLabel || 'Platform Video Detected'}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-200/60 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold uppercase">
+                            Preview Available
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                        {urlStatus.message}
+                      </p>
+
+                      <div className="pt-2 border-t border-indigo-200/60 dark:border-indigo-800/60 flex flex-wrap items-center gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => trimmerFileInputRef.current?.click()}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md btn-pro-primary cursor-pointer"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Upload Video File to Edit / Export</span>
+                        </button>
+
+                        {urlStatus.platformUrl && (
+                          <a
+                            href={urlStatus.platformUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold border border-slate-300 dark:border-slate-700 transition-colors"
+                          >
+                            <span>Open Platform</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Available Qualities Header & Batch Download Action */}
                   <div className="flex items-center justify-between pt-1">
@@ -1710,17 +1789,29 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
                               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                                 isDownloaded
                                   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs btn-pro-primary'
+                                  : loadedLocalFile
+                                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs btn-pro-primary'
+                                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-indigo-600 hover:text-white'
                               } disabled:opacity-50`}
                             >
                               {isThisDownloading ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                               ) : isDownloaded ? (
                                 <Check className="w-3.5 h-3.5" />
-                              ) : (
+                              ) : loadedLocalFile ? (
                                 <Download className="w-3.5 h-3.5" />
+                              ) : (
+                                <Upload className="w-3.5 h-3.5" />
                               )}
-                              <span>{isThisDownloading ? 'Processing...' : isDownloaded ? 'Downloaded' : 'Download'}</span>
+                              <span>
+                                {isThisDownloading
+                                  ? 'Processing...'
+                                  : isDownloaded
+                                  ? 'Downloaded'
+                                  : loadedLocalFile
+                                  ? 'Download'
+                                  : 'Upload to Export'}
+                              </span>
                             </button>
 
                             {/* Open in Studio Button (for video types) */}
@@ -1758,42 +1849,6 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
                 </div>
               )}
 
-              {/* Platform Detection Fallback Card (when video-info is unavailable) */}
-              {urlStatus && !urlStatus.downloadable && !videoInfo && (
-                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3.5 animate-fade-in">
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-bold">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>{urlStatus.badgeLabel || 'Platform URL detected'}</span>
-                  </div>
-
-                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                    {urlStatus.message}
-                  </p>
-
-                  <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-2.5">
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md btn-pro-primary cursor-pointer"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>Upload Video File</span>
-                    </button>
-
-                    {urlStatus.platformUrl && (
-                      <a
-                        href={urlStatus.platformUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold border border-slate-200 dark:border-slate-700 transition-colors"
-                      >
-                        <span>Open Platform</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                  </div>
-                </div>
-              )}
-
               {/* Error Message */}
               {urlError && (
                 <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-amber-900 dark:text-amber-300 text-xs">
@@ -1801,12 +1856,28 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
                   <div>
                     <span className="font-semibold block">{urlError}</span>
                     <button
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={() => trimmerFileInputRef.current?.click()}
                       className="mt-2 inline-flex items-center gap-1 font-bold underline hover:opacity-80 cursor-pointer text-indigo-600 dark:text-indigo-400"
                     >
                       Upload your video file directly instead
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* IMPORT DEBUG PANEL (Development Mode Only) */}
+              {(import.meta as any).env?.DEV && (
+                <div className="p-3 rounded-xl bg-slate-950 text-slate-300 font-mono text-[11px] border border-slate-800 space-y-1 animate-fade-in">
+                  <div className="text-amber-400 font-bold text-xs uppercase flex items-center justify-between">
+                    <span>IMPORT DEBUG (DEV ONLY)</span>
+                    <span className="text-[10px] text-slate-500">Contract Verification</span>
+                  </div>
+                  <div>Source: {urlMetadata?.platform || (loadedLocalFile ? 'Local File' : 'None')}</div>
+                  <div className="truncate">URL: {inputUrl || 'N/A'}</div>
+                  <div>Preview: {videoInfo ? '✓ Active' : 'None'}</div>
+                  <div>File: {loadedLocalFile ? `✓ ${loadedLocalFile.name} (${(loadedLocalFile.size / (1024 * 1024)).toFixed(1)} MB)` : 'Not available'}</div>
+                  <div>Download: {loadedLocalFile ? '✓ Enabled (Valid Blob/File pipeline)' : 'Unavailable (Awaiting file upload)'}</div>
+                  <div>Reason: {loadedLocalFile ? 'Editable media file ready for FFmpeg WebAssembly' : 'Platform page/embed URL is not a direct media file'}</div>
                 </div>
               )}
             </div>
