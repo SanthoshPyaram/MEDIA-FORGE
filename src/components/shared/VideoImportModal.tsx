@@ -460,29 +460,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setUrlMetadata(null);
     setVideoInfo(null);
     setDownloadedQualities({});
-    setBatchProgressText(null);
-
-    // 1. Try server resolver endpoint first for rich multi-quality extraction
-    try {
-      const infoRes = await fetch('/api/video-info', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: trimmed }),
-      });
-
-      if (infoRes.ok) {
-        const data: VideoInfoResponse = await infoRes.json();
-        if (data.success && data.qualities?.length) {
-          setVideoInfo(data);
-          setIsCheckingUrl(false);
-          return;
-        }
-      }
-    } catch {
-      // Fall through to client providers
-    }
-
-    // 2. Client-side provider fallback (oEmbed / DirectMedia)
+    // Provider resolution (YouTube oEmbed / DirectMedia / Instagram)
     const provider = findProviderForUrl(trimmed);
     if (!provider) {
       setIsCheckingUrl(false);
@@ -575,16 +553,16 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     }
   };
 
-  // Helper to fetch media blob from direct URL or local backend API
+  // Helper to fetch media blob from direct URL
   const resolveMediaBlob = async (
     targetUrl: string,
-    targetQuality = '720p',
+    _targetQuality = '720p',
     onProgress?: (msg: string) => void
   ): Promise<{ blob: Blob; title?: string } | null> => {
     const cleanUrl = targetUrl.trim();
     if (!cleanUrl) return null;
 
-    // 1. Direct Video URL (.mp4, .mov, .webm, .mkv, etc.)
+    // Direct Video URL (.mp4, .mov, .webm, .mkv, etc.)
     if (isDirectVideo(cleanUrl)) {
       try {
         onProgress?.('Fetching direct video stream in browser...');
@@ -595,33 +573,6 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
         }
       } catch (e) {
         console.warn('Direct media stream fetch error:', e);
-      }
-    }
-
-    // 2. Local Backend API (/api/download-video)
-    const isStaticHosting = typeof window !== 'undefined' && (
-      window.location.hostname.includes('github.io') ||
-      window.location.protocol === 'file:' ||
-      !window.location.port
-    );
-
-    if (!isStaticHosting) {
-      try {
-        onProgress?.('Requesting video from local server...');
-        const res = await fetch('/api/download-video', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: cleanUrl, quality: targetQuality }),
-        });
-        if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (!contentType.includes('text/html')) {
-            const blob = await res.blob();
-            return { blob };
-          }
-        }
-      } catch (e) {
-        console.warn('Local API download error:', e);
       }
     }
 
@@ -1235,7 +1186,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
                           controls
                           playsInline
                           crossOrigin="anonymous"
-                          src={isDirectMediaUrl ? inputUrl : `/api/video-preview?url=${encodeURIComponent(inputUrl.trim())}`}
+                          src={isDirectMediaUrl ? inputUrl : (localPreviewUrl || undefined)}
                           className="w-full max-h-72 object-contain mx-auto bg-black"
                           onTimeUpdate={(e) => {
                             setPlayerCurrentTime(e.currentTarget.currentTime);

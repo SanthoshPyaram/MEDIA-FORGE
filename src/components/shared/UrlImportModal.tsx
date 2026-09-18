@@ -124,58 +124,14 @@ export const UrlImportModal: React.FC<UrlImportModalProps> = ({
         }
       }
 
-      // Request authorized video import through acquisition handler
-      const response = await fetch('/api/import-video', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url: url.trim() }),
-      });
-
-      if (response.ok) {
-        const blob = await response.blob();
-        let videoTitle = 'imported_video';
-        const titleHeader = response.headers.get('X-Video-Title');
-        if (titleHeader) {
-          try {
-            videoTitle = decodeURIComponent(titleHeader);
-          } catch (e) {
-            videoTitle = titleHeader;
-          }
-        }
-        const fileName = `${videoTitle}.mp4`;
-        const file = new File([blob], fileName, { type: 'video/mp4' });
-
-        const info: DetectedFileInfo = {
-          file,
-          name: file.name,
-          extension: 'mp4',
-          mimeType: 'video/mp4',
-          realMimeType: 'video/mp4',
-          category: 'video',
-          size: file.size,
-          formattedSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-          supportedOperations: [],
-        };
-
-        setStatus('success');
-        onImportFile(info);
-        onClose();
-        return;
-      }
-
-      // If backend reports unavailable / DRM / private restrictions
-      const errJson = await response.json().catch(() => null);
       setStatus('unavailable');
       setErrorMessage(
-        errJson?.error ||
-          "URL import is unavailable for this video. Download the video using the platform's permitted method and upload the video file instead."
+        "URL import is unavailable for this platform stream due to browser CORS policies. Please upload the video file directly to convert and trim in-browser."
       );
     } catch (err) {
       setStatus('unavailable');
       setErrorMessage(
-        "URL import is unavailable for this video. Download the video using the platform's permitted method and upload the video file instead."
+        "URL import is unavailable for this video. Please upload the video file directly to convert and trim in-browser."
       );
     }
   };
