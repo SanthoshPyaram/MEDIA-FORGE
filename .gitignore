@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Production build artifacts
+dist/
+dist-ssr/
+*.local
+
+# Environment variables & secrets (Never commit .env to GitHub)
+.env
+.env.production
+.env.staging
+
+# Editor and OS files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+Thumbs.db
+[Ee]xpress/
+.DS_Store
+
+# Temporary logs & test artifacts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+temp_auth/
+temp_preview_cache/
+*.tsbuildinfo
+*.log

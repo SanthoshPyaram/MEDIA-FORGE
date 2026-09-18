@@ -1,0 +1,1115 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/context/AuthContext';
+import {
+  ShieldAlert,
+  ShieldCheck,
+  Smartphone,
+  Tablet,
+  Laptop,
+  Monitor,
+  AlertTriangle,
+  RefreshCw,
+  Clock,
+  Search,
+  CheckCircle2,
+  Users,
+  Activity,
+  ArrowLeft,
+  XCircle,
+  Filter,
+  Check,
+  X,
+  Edit2,
+  Ban,
+  Shield,
+  Layers,
+  FileText,
+  HelpCircle,
+  Fingerprint,
+} from 'lucide-react';
+import { verifyAdminBiometric } from '@/utils/biometricAuth';
+
+interface OverviewSummary {
+  totalUsers: number;
+  approvedDevices: number;
+  pendingRequests: number;
+  revokedDevices: number;
+  todaysLogins: number;
+  blockedAttempts: number;
+}
+
+interface OverviewData {
+  summary: OverviewSummary;
+  recentActivity: Array<{
+    id: string;
+    time: string;
+    userId: string;
+    name: string;
+    device: string;
+    status: string;
+    reason: string;
+  }>;
+  newDeviceAlerts: Array<{
+    id: string;
+    time: string;
+    userId: string;
+    name: string;
+    device: string;
+    status: string;
+    reason: string;
+  }>;
+}
+
+interface UserItem {
+  userId: string;
+  name: string;
+  approvedDevicesCount: number;
+  maxDevices: number;
+  status: string;
+  lastLogin: string;
+}
+
+interface DeviceRequest {
+  requestId: string;
+  userId: string;
+  name: string;
+  deviceId: string;
+  deviceType: string;
+  operatingSystem: string;
+  browser: string;
+  friendlyName: string;
+  requestTime: string;
+  status: string;
+}
+
+interface ApprovedDevice {
+  userId: string;
+  name: string;
+  friendlyName: string;
+  deviceId: string;
+  browser: string;
+  os: string;
+  status: string;
+  created: string;
+  lastLogin: string;
+}
+
+interface LoginHistoryItem {
+  id: string;
+  time: string;
+  userId: string;
+  name: string;
+  device: string;
+  browser: string;
+  os: string;
+  deviceId: string;
+  status: string;
+  reason: string;
+}
+
+interface SecurityEventItem {
+  id: string;
+  eventType: string;
+  userId: string;
+  name: string;
+  device: string;
+  deviceId: string;
+  time: string;
+  details: string;
+}
+
+interface AdminAuditDashboardProps {
+  onBackToHome: () => void;
+}
+
+type AdminSection =
+  | 'dashboard'
+  | 'users'
+  | 'requests'
+  | 'devices'
+  | 'history'
+  | 'events';
+
+export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBackToHome }) => {
+  const { token } = useAuth();
+
+  const [activeSection, setActiveSection] = useState<AdminSection>('dashboard');
+
+  // Overview Data
+  const [overview, setOverview] = useState<OverviewData | null>(null);
+
+  // Users Data
+  const [usersList, setUsersList] = useState<UserItem[]>([]);
+
+  // Requests Data
+  const [requests, setRequests] = useState<DeviceRequest[]>([]);
+
+  // Approved Devices Data
+  const [devices, setDevices] = useState<ApprovedDevice[]>([]);
+
+  // History Data
+  const [history, setHistory] = useState<LoginHistoryItem[]>([]);
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyStatusFilter, setHistoryStatusFilter] = useState('ALL');
+
+  // Security Events Data
+  const [events, setEvents] = useState<SecurityEventItem[]>([]);
+
+  // Feedback & Loading
+  const [isLoading, setIsLoading] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [isBioApproving, setIsBioApproving] = useState(false);
+
+  // Modals State
+  const [approveConfirmTarget, setApproveConfirmTarget] = useState<DeviceRequest | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{ userId: string; deviceId?: string; currentName: string; isDevice?: boolean } | null>(null);
+  const [newNameInput, setNewNameInput] = useState('');
+
+  // -------------------------------------------------------------
+  // Data Fetchers
+  // -------------------------------------------------------------
+  const fetchOverview = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/overview', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setOverview(data);
+      }
+    } catch {}
+  }, [token]);
+
+  const fetchUsers = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/users', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUsersList(data.users || []);
+      }
+    } catch {}
+  }, [token]);
+
+  const fetchRequests = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/device-requests', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRequests(data.requests || []);
+      }
+    } catch {}
+  }, [token]);
+
+  const fetchDevices = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/approved-devices', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDevices(data.devices || []);
+      }
+    } catch {}
+  }, [token]);
+
+  const fetchHistory = useCallback(async () => {
+    if (!token) return;
+    try {
+      const params = new URLSearchParams();
+      if (historySearch) params.set('search', historySearch);
+      if (historyStatusFilter && historyStatusFilter !== 'ALL') params.set('status', historyStatusFilter);
+
+      const res = await fetch(`/api/admin/login-history?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data.history || []);
+      }
+    } catch {}
+  }, [token, historySearch, historyStatusFilter]);
+
+  const fetchEvents = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/security-events', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEvents(data.events || []);
+      }
+    } catch {}
+  }, [token]);
+
+  const refreshAll = useCallback(async () => {
+    setIsLoading(true);
+    await Promise.all([
+      fetchOverview(),
+      fetchUsers(),
+      fetchRequests(),
+      fetchDevices(),
+      fetchHistory(),
+      fetchEvents(),
+    ]);
+    setIsLoading(false);
+  }, [fetchOverview, fetchUsers, fetchRequests, fetchDevices, fetchHistory, fetchEvents]);
+
+  useEffect(() => {
+    refreshAll();
+    const timer = setInterval(refreshAll, 12000);
+    return () => clearInterval(timer);
+  }, [refreshAll]);
+
+  // -------------------------------------------------------------
+  // Actions: Approve / Reject / Revoke / Rename
+  // -------------------------------------------------------------
+  const handleConfirmApproval = async (withBiometric = false) => {
+    if (!token || !approveConfirmTarget) return;
+
+    let bioVerified = false;
+    if (withBiometric) {
+      setIsBioApproving(true);
+      try {
+        const bioResult = await verifyAdminBiometric('24MIC7312');
+        setIsBioApproving(false);
+        if (!bioResult.success) {
+          setFeedbackMessage(bioResult.error || 'Biometric verification cancelled.');
+          return;
+        }
+        bioVerified = true;
+      } catch (err: any) {
+        setIsBioApproving(false);
+        setFeedbackMessage(err.message || 'Biometric verification error.');
+        return;
+      }
+    }
+
+    try {
+      const res = await fetch('/api/admin/device-requests/approve', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          requestId: approveConfirmTarget.requestId,
+          deviceId: approveConfirmTarget.deviceId,
+          userId: approveConfirmTarget.userId,
+          biometricVerified: bioVerified,
+        }),
+      });
+
+      if (res.ok) {
+        setFeedbackMessage(
+          `✓ Approved device ${approveConfirmTarget.friendlyName} for ${approveConfirmTarget.name}${
+            bioVerified ? ' (Biometrically Verified 👆)' : ''
+          }`
+        );
+        setApproveConfirmTarget(null);
+        refreshAll();
+      } else {
+        const err = await res.json();
+        setFeedbackMessage(`Failed: ${err.error}`);
+      }
+    } catch (e: any) {
+      setFeedbackMessage(`Error: ${e.message}`);
+    }
+  };
+
+  const handleRejectRequest = async (reqItem: DeviceRequest) => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/device-requests/reject', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          requestId: reqItem.requestId,
+          deviceId: reqItem.deviceId,
+          userId: reqItem.userId,
+        }),
+      });
+
+      if (res.ok) {
+        setFeedbackMessage(`Rejected device request for ${reqItem.name}`);
+        refreshAll();
+      }
+    } catch {}
+  };
+
+  const handleRevokeDevice = async (userId: string, deviceId: string, deviceName: string) => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/devices/revoke', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ userId, deviceId }),
+      });
+
+      if (res.ok) {
+        setFeedbackMessage(`🚫 Revoked device: ${deviceName}`);
+        refreshAll();
+      }
+    } catch {}
+  };
+
+  const handleSaveRename = async () => {
+    if (!token || !renameTarget || !newNameInput.trim()) return;
+    try {
+      if (renameTarget.isDevice) {
+        // Rename Device
+        await fetch('/api/admin/devices/rename', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            userId: renameTarget.userId,
+            deviceId: renameTarget.deviceId,
+            friendlyName: newNameInput.trim(),
+          }),
+        });
+      } else {
+        // Rename User
+        await fetch('/api/admin/users/rename', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            userId: renameTarget.userId,
+            name: newNameInput.trim(),
+          }),
+        });
+      }
+      setRenameTarget(null);
+      setNewNameInput('');
+      refreshAll();
+    } catch {}
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8 space-y-6">
+      {/* Top Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800/80">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBackToHome}
+            className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            title="Return to MediaForge Dashboard"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <Shield className="w-6 h-6 text-indigo-400" />
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                ADMIN PORTAL
+              </h1>
+            </div>
+            <p className="text-xs text-slate-400">
+              Private 5-User Authentication, Device Approvals & Security Audit Log
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {feedbackMessage && (
+            <div className="px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-xs text-indigo-300 flex items-center gap-2">
+              <span>{feedbackMessage}</span>
+              <button
+                onClick={() => setFeedbackMessage(null)}
+                className="text-indigo-400 hover:text-white"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          <button
+            onClick={refreshAll}
+            disabled={isLoading}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-all"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-indigo-400' : ''}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Navigation Sections */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-850">
+        {[
+          { id: 'dashboard', label: 'Dashboard', icon: Activity },
+          { id: 'users', label: 'Users', icon: Users, badge: usersList.length },
+          { id: 'requests', label: 'Device Requests', icon: ShieldAlert, badge: requests.length, alert: requests.length > 0 },
+          { id: 'devices', label: 'Approved Devices', icon: Laptop, badge: devices.filter(d => d.status === 'approved').length },
+          { id: 'history', label: 'Login History', icon: Clock },
+          { id: 'events', label: 'Security Events', icon: Layers },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeSection === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveSection(tab.id as AdminSection)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                isActive
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                  : 'bg-slate-900/60 text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              <span>{tab.label}</span>
+              {typeof tab.badge === 'number' && (
+                <span
+                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
+                    tab.alert
+                      ? 'bg-amber-500 text-black font-extrabold animate-pulse'
+                      : isActive
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-800 text-slate-300'
+                  }`}
+                >
+                  {tab.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ========================================================= */}
+      {/* SECTION 1: DASHBOARD                                      */}
+      {/* ========================================================= */}
+      {activeSection === 'dashboard' && (
+        <div className="space-y-6">
+          {/* Security Alert: Blocked New Device Attempts */}
+          {overview?.newDeviceAlerts && overview.newDeviceAlerts.length > 0 && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 border border-amber-500/50 shadow-lg shadow-amber-500/5 space-y-3">
+              <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+                <AlertTriangle className="w-5 h-5 animate-pulse" />
+                <span>🚨 NEW DEVICE LOGIN ATTEMPT</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {overview.newDeviceAlerts.map((alert) => (
+                  <div
+                    key={alert.id}
+                    className="p-3.5 rounded-xl bg-slate-950/70 border border-amber-500/30 text-xs space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white font-mono">{alert.userId}</span>
+                      <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 text-[10px] font-bold">
+                        BLOCKED
+                      </span>
+                    </div>
+                    <div className="text-slate-300">Name: <span className="font-semibold text-white">{alert.name}</span></div>
+                    <div className="text-slate-300">Device: <span className="font-semibold text-white">{alert.device}</span></div>
+                    <div className="text-slate-400 text-[10px]">Time: {alert.time}</div>
+                    <div className="text-amber-300/90 text-[11px] font-medium pt-1">
+                      Reason: {alert.reason}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 6 KPI Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">TOTAL USERS</div>
+              <div className="text-2xl font-black text-indigo-400 mt-1">{overview?.summary.totalUsers || 5}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Configured in .env</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">APPROVED DEVICES</div>
+              <div className="text-2xl font-black text-emerald-400 mt-1">{overview?.summary.approvedDevices || 0}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Active trusted devices</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">PENDING REQUESTS</div>
+              <div className="text-2xl font-black text-amber-400 mt-1">{overview?.summary.pendingRequests || 0}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Awaiting admin review</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">REVOKED DEVICES</div>
+              <div className="text-2xl font-black text-red-400 mt-1">{overview?.summary.revokedDevices || 0}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Deauthorized hardware</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">TODAY'S LOGINS</div>
+              <div className="text-2xl font-black text-cyan-400 mt-1">{overview?.summary.todaysLogins || 0}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Session entries today</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">BLOCKED ATTEMPTS</div>
+              <div className="text-2xl font-black text-rose-400 mt-1">{overview?.summary.blockedAttempts || 0}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Prevented access events</div>
+            </div>
+          </div>
+
+          {/* Recent Activity Feed */}
+          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+            <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+              <Activity className="w-4 h-4 text-indigo-400" />
+              <span>RECENT ACTIVITY</span>
+            </h2>
+
+            <div className="space-y-2">
+              {overview?.recentActivity && overview.recentActivity.length > 0 ? (
+                overview.recentActivity.map((act) => {
+                  const isSuccess = act.status === 'SUCCESS';
+                  const isBlocked = act.status === 'BLOCKED' || act.status === 'FAILED';
+                  return (
+                    <div
+                      key={act.id}
+                      className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-center gap-3">
+                        {isSuccess ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        ) : isBlocked ? (
+                          <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+                        ) : (
+                          <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                        )}
+                        <div>
+                          <span className="font-bold text-white font-mono">{act.userId}</span>
+                          {act.name && act.name !== 'Unknown' && (
+                            <span className="text-slate-300"> — {act.name}</span>
+                          )}
+                          <span className="text-slate-400 text-[11px] ml-2 font-mono">({act.device})</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-400 text-[11px]">{act.reason}</span>
+                        <span className="text-slate-500 text-[10px]">{act.time}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-8 text-center text-slate-500 text-xs">No recent activity recorded yet.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* SECTION 2: USERS                                          */}
+      {/* ========================================================= */}
+      {activeSection === 'users' && (
+        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">5 AUTHORIZED USERS</h2>
+              <p className="text-xs text-slate-400">User accounts configured in server-side environment variables</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-semibold border-b border-slate-800">
+                <tr>
+                  <th className="p-3">User ID</th>
+                  <th className="p-3">Registered Name</th>
+                  <th className="p-3">Approved Devices</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Last Login</th>
+                  <th className="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {usersList.map((u) => (
+                  <tr key={u.userId} className="hover:bg-slate-850/50 transition-colors">
+                    <td className="p-3 font-mono font-bold text-cyan-300">{u.userId}</td>
+                    <td className="p-3 font-semibold text-white">{u.name}</td>
+                    <td className="p-3 font-mono">
+                      <span className={u.approvedDevicesCount >= 2 ? 'text-amber-400 font-bold' : 'text-slate-300'}>
+                        {u.approvedDevicesCount} / {u.maxDevices}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          u.status.includes('Active')
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : u.status.includes('Max')
+                            ? 'bg-amber-500/20 text-amber-300'
+                            : u.status.includes('Pending')
+                            ? 'bg-indigo-500/20 text-indigo-300'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {u.status}
+                      </span>
+                    </td>
+                    <td className="p-3 text-slate-400 text-[11px]">{u.lastLogin}</td>
+                    <td className="p-3 text-right">
+                      <button
+                        onClick={() => {
+                          setRenameTarget({ userId: u.userId, currentName: u.name, isDevice: false });
+                          setNewNameInput(u.name);
+                        }}
+                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                        title="Rename User Display Name"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* SECTION 3: DEVICE REQUESTS                                */}
+      {/* ========================================================= */}
+      {activeSection === 'requests' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">PENDING DEVICE APPROVAL REQUESTS</h2>
+              <p className="text-xs text-slate-400">Requests created when authenticated users connect with a new device</p>
+            </div>
+          </div>
+
+          {requests.length === 0 ? (
+            <div className="p-12 rounded-2xl bg-slate-900 border border-slate-800 text-center space-y-2">
+              <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+              <div className="text-sm font-bold text-white">No Pending Requests</div>
+              <p className="text-xs text-slate-400">All device connection requests have been reviewed.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {requests.map((req) => (
+                <div
+                  key={req.requestId}
+                  className="p-5 rounded-2xl bg-slate-900 border border-amber-500/50 shadow-lg shadow-amber-500/5 space-y-4"
+                >
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="w-5 h-5 text-amber-400" />
+                      <span className="font-bold text-white text-sm">🔐 NEW DEVICE REQUEST</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold">
+                      🟡 PENDING
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <div className="text-slate-400 text-[10px] uppercase font-semibold">User ID:</div>
+                      <div className="font-mono font-bold text-cyan-300">{req.userId}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 text-[10px] uppercase font-semibold">Name:</div>
+                      <div className="font-bold text-white">{req.name}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 text-[10px] uppercase font-semibold">Device:</div>
+                      <div className="text-slate-200">{req.friendlyName}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 text-[10px] uppercase font-semibold">Operating System:</div>
+                      <div className="text-slate-200">{req.operatingSystem}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 text-[10px] uppercase font-semibold">Browser:</div>
+                      <div className="text-slate-200">{req.browser}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 text-[10px] uppercase font-semibold">Request Time:</div>
+                      <div className="text-slate-400 text-[11px]">{req.requestTime}</div>
+                    </div>
+                  </div>
+
+                  <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400 font-mono flex items-center justify-between">
+                    <span>Trusted Device ID:</span>
+                    <span className="text-indigo-300 font-semibold">{req.deviceId.slice(0, 8)}...</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <button
+                      onClick={() => setApproveConfirmTarget(req)}
+                      className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>✓ APPROVE</span>
+                    </button>
+                    <button
+                      onClick={() => handleRejectRequest(req)}
+                      className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-red-950/60 hover:border-red-500/50 border border-transparent text-slate-300 hover:text-red-300 font-semibold text-xs transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <X className="w-4 h-4" />
+                      <span>✕ REJECT</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* SECTION 4: APPROVED DEVICES                               */}
+      {/* ========================================================= */}
+      {activeSection === 'devices' && (
+        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">DEVICE MANAGEMENT</h2>
+              <p className="text-xs text-slate-400">All registered devices and authorization states</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-semibold border-b border-slate-800">
+                <tr>
+                  <th className="p-3">User ID</th>
+                  <th className="p-3">Name</th>
+                  <th className="p-3">Device Friendly Name</th>
+                  <th className="p-3">Device ID</th>
+                  <th className="p-3">Browser / OS</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Last Login</th>
+                  <th className="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {devices.map((d) => (
+                  <tr key={`${d.userId}_${d.deviceId}`} className="hover:bg-slate-850/50 transition-colors">
+                    <td className="p-3 font-mono font-bold text-cyan-300">{d.userId}</td>
+                    <td className="p-3 font-semibold text-white">{d.name}</td>
+                    <td className="p-3 text-slate-200 font-medium">{d.friendlyName}</td>
+                    <td className="p-3 font-mono text-[11px] text-slate-400">{d.deviceId.slice(0, 10)}...</td>
+                    <td className="p-3 text-slate-300">
+                      <div>{d.browser}</div>
+                      <div className="text-[10px] text-slate-500">{d.os}</div>
+                    </td>
+                    <td className="p-3">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          d.status === 'approved'
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : d.status === 'revoked'
+                            ? 'bg-red-500/20 text-red-300'
+                            : d.status === 'rejected'
+                            ? 'bg-slate-800 text-rose-300'
+                            : 'bg-amber-500/20 text-amber-300'
+                        }`}
+                      >
+                        {d.status === 'approved'
+                          ? '✓ APPROVED'
+                          : d.status === 'revoked'
+                          ? '🚫 REVOKED'
+                          : d.status.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="p-3 text-slate-400 text-[11px]">{d.lastLogin}</td>
+                    <td className="p-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => {
+                            setRenameTarget({
+                              userId: d.userId,
+                              deviceId: d.deviceId,
+                              currentName: d.friendlyName,
+                              isDevice: true,
+                            });
+                            setNewNameInput(d.friendlyName);
+                          }}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                          title="Rename Device"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        {d.status === 'approved' && (
+                          <button
+                            onClick={() => handleRevokeDevice(d.userId, d.deviceId, d.friendlyName)}
+                            className="p-1.5 rounded-lg bg-red-950/60 border border-red-500/30 text-red-300 hover:bg-red-900/80 transition-colors"
+                            title="Revoke Device Access"
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* SECTION 5: LOGIN HISTORY                                  */}
+      {/* ========================================================= */}
+      {activeSection === 'history' && (
+        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">LOGIN HISTORY AUDIT TRAIL</h2>
+              <p className="text-xs text-slate-400">Complete immutable record of all login and authorization attempts</p>
+            </div>
+
+            {/* Filters */}
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  placeholder="Search User ID / Name / Device..."
+                  className="pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-48 sm:w-64"
+                />
+              </div>
+
+              <select
+                value={historyStatusFilter}
+                onChange={(e) => setHistoryStatusFilter(e.target.value)}
+                className="px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="SUCCESS">SUCCESS</option>
+                <option value="FAILED">FAILED</option>
+                <option value="BLOCKED">BLOCKED</option>
+                <option value="PENDING">PENDING</option>
+                <option value="REVOKED">REVOKED</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-semibold border-b border-slate-800">
+                <tr>
+                  <th className="p-3">Time</th>
+                  <th className="p-3">User ID</th>
+                  <th className="p-3">Name</th>
+                  <th className="p-3">Device</th>
+                  <th className="p-3">Browser / OS</th>
+                  <th className="p-3">Device ID</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Reason</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {history.map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-850/50 transition-colors">
+                    <td className="p-3 text-slate-400 font-mono text-[11px] whitespace-nowrap">{item.time}</td>
+                    <td className="p-3 font-mono font-bold text-cyan-300">{item.userId}</td>
+                    <td className="p-3 font-semibold text-white">{item.name}</td>
+                    <td className="p-3 text-slate-200">{item.device}</td>
+                    <td className="p-3 text-slate-300">
+                      <div>{item.browser}</div>
+                      <div className="text-[10px] text-slate-500">{item.os}</div>
+                    </td>
+                    <td className="p-3 font-mono text-[11px] text-slate-400">{item.deviceId.slice(0, 8)}...</td>
+                    <td className="p-3">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          item.status === 'SUCCESS'
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : item.status === 'FAILED'
+                            ? 'bg-red-500/20 text-red-300'
+                            : item.status === 'BLOCKED'
+                            ? 'bg-rose-500/20 text-rose-300'
+                            : item.status === 'PENDING'
+                            ? 'bg-amber-500/20 text-amber-300'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {item.status}
+                      </span>
+                    </td>
+                    <td className="p-3 text-slate-400 text-[11px]">{item.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* SECTION 6: SECURITY EVENTS                                */}
+      {/* ========================================================= */}
+      {activeSection === 'events' && (
+        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+          <div>
+            <h2 className="text-sm font-bold text-white uppercase tracking-wider">SECURITY EVENTS AUDIT FEED</h2>
+            <p className="text-xs text-slate-400">Real-time log of device detections, approvals, revocations, and authentication states</p>
+          </div>
+
+          <div className="space-y-2">
+            {events.map((ev) => (
+              <div
+                key={ev.id}
+                className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-bold">
+                    {ev.eventType}
+                  </span>
+                  <span className="font-mono font-bold text-white">{ev.userId}</span>
+                  {ev.name && ev.name !== 'Unknown' && (
+                    <span className="text-slate-300">— {ev.name}</span>
+                  )}
+                  <span className="text-slate-400 font-mono text-[11px]">({ev.device})</span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-slate-300 text-[11px]">{ev.details}</span>
+                  <span className="text-slate-500 text-[10px] font-mono whitespace-nowrap">{ev.time}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL 1: APPROVAL CONFIRMATION MODAL                      */}
+      {/* ========================================================= */}
+      {approveConfirmTarget && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-5 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-white">Approve this device?</h3>
+              <p className="text-xs text-slate-400">This will grant trusted access for this hardware.</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-left space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">User ID:</span>
+                <span className="font-mono font-bold text-cyan-300">{approveConfirmTarget.userId}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Name:</span>
+                <span className="font-bold text-white">{approveConfirmTarget.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Device:</span>
+                <span className="text-slate-200">{approveConfirmTarget.friendlyName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Device ID:</span>
+                <span className="font-mono text-indigo-300">{approveConfirmTarget.deviceId.slice(0, 10)}...</span>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => handleConfirmApproval(true)}
+                disabled={isBioApproving}
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:brightness-110 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2"
+              >
+                <Fingerprint className={`w-4 h-4 text-emerald-200 ${isBioApproving ? 'animate-pulse' : ''}`} />
+                <span>
+                  {isBioApproving ? 'Scanning Fingerprint / Windows Hello...' : '👆 Verify Fingerprint & Approve'}
+                </span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setApproveConfirmTarget(null)}
+                  className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmApproval(false)}
+                  className="flex-1 py-2 px-3 rounded-xl bg-slate-800/80 hover:bg-emerald-950/50 hover:text-emerald-300 border border-slate-700 text-slate-300 font-semibold text-xs transition-colors"
+                >
+                  Confirm (Password)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL 2: RENAME MODAL (USER OR DEVICE)                    */}
+      {/* ========================================================= */}
+      {renameTarget && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-5">
+            <h3 className="text-base font-bold text-white">
+              {renameTarget.isDevice ? 'Rename Device Description' : 'Edit User Display Name'}
+            </h3>
+
+            <div className="space-y-2">
+              <label className="text-xs text-slate-400">
+                {renameTarget.isDevice ? 'Friendly Device Name' : 'Display Name'}
+              </label>
+              <input
+                type="text"
+                value={newNameInput}
+                onChange={(e) => setNewNameInput(e.target.value)}
+                placeholder="Enter new name"
+                className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setRenameTarget(null)}
+                className="flex-1 py-2 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveRename}
+                className="flex-1 py-2 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg transition-all"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

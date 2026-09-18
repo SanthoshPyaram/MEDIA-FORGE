@@ -1,0 +1,675 @@
+{
+  "users": {
+    "USER001": {
+      "userId": "USER001",
+      "registeredName": "Santhosh Reddy"
+    },
+    "7287954409": {
+      "userId": "7287954409",
+      "registeredName": "pyaram santhosh reddy"
+    }
+  },
+  "devices": {
+    "user001_device_laptop_a_1111": {
+      "deviceId": "device_laptop_a_1111",
+      "userId": "USER001",
+      "friendlyName": "Windows Laptop",
+      "deviceType": "Laptop",
+      "os": "Windows",
+      "browser": "Chrome",
+      "screen": "",
+      "status": "revoked",
+      "submittedName": "Santhosh Reddy",
+      "createdAt": "18 Sep 2026 03:00 PM",
+      "lastLogin": "18 Sep 2026 03:00 PM"
+    },
+    "user001_device_mobile_b_2222": {
+      "deviceId": "device_mobile_b_2222",
+      "userId": "USER001",
+      "friendlyName": "Android Phone",
+      "deviceType": "Mobile",
+      "os": "Android",
+      "browser": "Chrome",
+      "screen": "",
+      "status": "approved",
+      "submittedName": "Santhosh Reddy",
+      "createdAt": "18 Sep 2026 03:00 PM",
+      "lastLogin": "18 Sep 2026 03:00 PM"
+    },
+    "7287954409_3a7ac319-677d-49b0-a66e-91d4a0ee6167": {
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "userId": "7287954409",
+      "friendlyName": "Windows Laptop",
+      "deviceType": "Laptop",
+      "os": "Windows 11/10",
+      "browser": "Chrome",
+      "screen": "1536×960",
+      "status": "approved",
+      "submittedName": "pyaram santhosh reddy",
+      "createdAt": "18 Sep 2026 03:20 PM",
+      "lastLogin": "18 Sep 2026 03:24 PM"
+    }
+  },
+  "deviceRequests": [
+    {
+      "requestId": "req_dd6e17546a9e",
+      "userId": "7287954409",
+      "name": "pyaram santhosh reddy",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "deviceType": "Laptop",
+      "operatingSystem": "Windows 11/10",
+      "browser": "Chrome",
+      "friendlyName": "Windows Laptop",
+      "requestTime": "18 Sep 2026 03:20 PM",
+      "status": "approved"
+    },
+    {
+      "requestId": "req_7622713b3065",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "deviceId": "device_mobile_b_2222",
+      "deviceType": "Mobile",
+      "operatingSystem": "Android",
+      "browser": "Chrome",
+      "friendlyName": "Android Phone",
+      "requestTime": "18 Sep 2026 03:00 PM",
+      "status": "approved"
+    },
+    {
+      "requestId": "req_d0fcb6ef6d52",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "deviceId": "device_laptop_a_1111",
+      "deviceType": "Laptop",
+      "operatingSystem": "Windows",
+      "browser": "Chrome",
+      "friendlyName": "Windows Laptop",
+      "requestTime": "18 Sep 2026 03:00 PM",
+      "status": "approved"
+    }
+  ],
+  "loginHistory": [
+    {
+      "id": "log_1f6f6d1ff2fd",
+      "time": "18 Sep 2026 03:24 PM",
+      "userId": "7287954409",
+      "name": "pyaram santhosh reddy",
+      "device": "Windows Laptop",
+      "browser": "Chrome",
+      "os": "Windows 11/10",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "status": "SUCCESS",
+      "reason": "Approved Device"
+    },
+    {
+      "id": "log_4e299a528ede",
+      "time": "18 Sep 2026 03:20 PM",
+      "userId": "24MIC7312",
+      "name": "Super Administrator",
+      "device": "Windows Laptop",
+      "browser": "Chrome",
+      "os": "Windows 11/10",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "status": "SUCCESS",
+      "reason": "Admin Authentication"
+    },
+    {
+      "id": "log_a750b3bc5baa",
+      "time": "18 Sep 2026 03:20 PM",
+      "userId": "7287954409",
+      "name": "pyaram santhosh reddy",
+      "device": "Windows Laptop",
+      "browser": "Chrome",
+      "os": "Windows 11/10",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "status": "PENDING",
+      "reason": "Approval Requested"
+    },
+    {
+      "id": "log_2f074d12cc05",
+      "time": "18 Sep 2026 03:20 PM",
+      "userId": "7287954409",
+      "name": "Unknown",
+      "device": "Windows Laptop",
+      "browser": "Chrome",
+      "os": "Windows 11/10",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "status": "BLOCKED",
+      "reason": "New Device Approval Required"
+    },
+    {
+      "id": "log_56a775266889",
+      "time": "18 Sep 2026 03:09 PM",
+      "userId": "7287954409",
+      "name": "User",
+      "device": "Windows Laptop",
+      "browser": "Chrome",
+      "os": "Windows",
+      "deviceId": "user1-new-device",
+      "status": "FAILED",
+      "reason": "Invalid Password"
+    },
+    {
+      "id": "log_f75453a9f366",
+      "time": "18 Sep 2026 03:08 PM",
+      "userId": "7287954409",
+      "name": "Unknown",
+      "device": "Windows Laptop",
+      "browser": "Chrome",
+      "os": "Windows",
+      "deviceId": "user1-new-device",
+      "status": "BLOCKED",
+      "reason": "New Device Approval Required"
+    },
+    {
+      "id": "log_64606282dabc",
+      "time": "18 Sep 2026 03:08 PM",
+      "userId": "24MIC7312",
+      "name": "Super Administrator",
+      "device": "Admin PC",
+      "browser": "Chrome",
+      "os": "Windows",
+      "deviceId": "admin-test-device",
+      "status": "SUCCESS",
+      "reason": "Admin Authentication"
+    },
+    {
+      "id": "log_c878d0676562",
+      "time": "18 Sep 2026 03:00 PM",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Windows Laptop",
+      "browser": "Chrome",
+      "os": "Windows",
+      "deviceId": "device_laptop_a_1111",
+      "status": "BLOCKED",
+      "reason": "Device Revoked"
+    },
+    {
+      "id": "log_0d25db29d2a0",
+      "time": "18 Sep 2026 03:00 PM",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "iPad Tablet",
+      "browser": "Safari",
+      "os": "iPadOS",
+      "deviceId": "device_tablet_c_3333",
+      "status": "BLOCKED",
+      "reason": "Device limit reached (max 2 approved devices)"
+    },
+    {
+      "id": "log_549937030b6f",
+      "time": "18 Sep 2026 03:00 PM",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Android Phone",
+      "browser": "Chrome",
+      "os": "Android",
+      "deviceId": "device_mobile_b_2222",
+      "status": "SUCCESS",
+      "reason": "Approved Device"
+    },
+    {
+      "id": "log_480a159b3d48",
+      "time": "18 Sep 2026 03:00 PM",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Android Phone",
+      "browser": "Chrome",
+      "os": "Android",
+      "deviceId": "device_mobile_b_2222",
+      "status": "BLOCKED",
+      "reason": "Device Pending Approval"
+    },
+    {
+      "id": "log_b17f864a14b0",
+      "time": "18 Sep 2026 03:00 PM",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Android Phone",
+      "browser": "Chrome",
+      "os": "Android",
+      "deviceId": "device_mobile_b_2222",
+      "status": "PENDING",
+      "reason": "Approval Requested"
+    },
+    {
+      "id": "log_50604d3741a6",
+      "time": "18 Sep 2026 03:00 PM",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Android Phone",
+      "browser": "Chrome",
+      "os": "Android",
+      "deviceId": "device_mobile_b_2222",
+      "status": "BLOCKED",
+      "reason": "New Device Approval Required"
+    },
+    {
+      "id": "log_4879a55e2d07",
+      "time": "18 Sep 2026 03:00 PM",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Windows Laptop",
+      "browser": "Chrome",
+      "os": "Windows",
+      "deviceId": "device_laptop_a_1111",
+      "status": "SUCCESS",
+      "reason": "Approved Device"
+    },
+    {
+      "id": "log_df6d35c2f647",
+      "time": "18 Sep 2026 03:00 PM",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Windows Laptop",
+      "browser": "Chrome",
+      "os": "Windows",
+      "deviceId": "device_laptop_a_1111",
+      "status": "BLOCKED",
+      "reason": "Device Pending Approval"
+    },
+    {
+      "id": "log_27c44da8042f",
+      "time": "18 Sep 2026 03:00 PM",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Windows Laptop",
+      "browser": "Chrome",
+      "os": "Windows",
+      "deviceId": "device_laptop_a_1111",
+      "status": "PENDING",
+      "reason": "Approval Requested"
+    },
+    {
+      "id": "log_33b1be7f2264",
+      "time": "18 Sep 2026 03:00 PM",
+      "userId": "USER001",
+      "name": "Unknown",
+      "device": "Windows Laptop",
+      "browser": "Chrome",
+      "os": "Windows",
+      "deviceId": "device_laptop_a_1111",
+      "status": "BLOCKED",
+      "reason": "New Device Approval Required"
+    },
+    {
+      "id": "log_d2f89c7eda1f",
+      "time": "18 Sep 2026 03:00 PM",
+      "userId": "ADMIN001",
+      "name": "Super Administrator",
+      "device": "Admin Workstation",
+      "browser": "Chrome",
+      "os": "Windows",
+      "deviceId": "admin-console-001",
+      "status": "SUCCESS",
+      "reason": "Admin Authentication"
+    }
+  ],
+  "securityEvents": [
+    {
+      "id": "sec_57679162ece8",
+      "eventType": "Logout",
+      "userId": "7287954409",
+      "name": "pyaram santhosh reddy",
+      "device": "Windows Laptop",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "time": "18 Sep 2026 03:24 PM",
+      "details": "User logged out of active session"
+    },
+    {
+      "id": "sec_0234d4c7d0a8",
+      "eventType": "Successful login",
+      "userId": "7287954409",
+      "name": "pyaram santhosh reddy",
+      "device": "Windows Laptop",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "time": "18 Sep 2026 03:24 PM",
+      "details": "User entered application following device approval"
+    },
+    {
+      "id": "sec_247eb0e5980d",
+      "eventType": "Device approved",
+      "userId": "7287954409",
+      "name": "pyaram santhosh reddy",
+      "device": "Windows Laptop",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "time": "18 Sep 2026 03:21 PM",
+      "details": "Administrator confirmed approval for device Windows Laptop"
+    },
+    {
+      "id": "sec_0b784d44fb66",
+      "eventType": "Successful login",
+      "userId": "24MIC7312",
+      "name": "Super Administrator",
+      "device": "Windows Laptop",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "time": "18 Sep 2026 03:20 PM",
+      "details": "Administrator logged into security control center"
+    },
+    {
+      "id": "sec_c08ec7e70380",
+      "eventType": "Approval requested",
+      "userId": "7287954409",
+      "name": "pyaram santhosh reddy",
+      "device": "Windows Laptop",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "time": "18 Sep 2026 03:20 PM",
+      "details": "Approval request created with ID: req_dd6e17546a9e"
+    },
+    {
+      "id": "sec_c85a961f7dfe",
+      "eventType": "Name submitted",
+      "userId": "7287954409",
+      "name": "pyaram santhosh reddy",
+      "device": "Windows Laptop",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "time": "18 Sep 2026 03:20 PM",
+      "details": "User entered display name: pyaram santhosh reddy"
+    },
+    {
+      "id": "sec_f56ccb98b240",
+      "eventType": "Blocked login",
+      "userId": "7287954409",
+      "name": "Unknown",
+      "device": "Windows Laptop",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "time": "18 Sep 2026 03:20 PM",
+      "details": "New device requires administrator approval"
+    },
+    {
+      "id": "sec_b60c3bfa3192",
+      "eventType": "New device detected",
+      "userId": "7287954409",
+      "name": "Unknown",
+      "device": "Windows Laptop",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "time": "18 Sep 2026 03:20 PM",
+      "details": "New device detected for account 7287954409"
+    },
+    {
+      "id": "sec_0b7cb8564dbc",
+      "eventType": "Invalid password",
+      "userId": "7287954409",
+      "name": "User",
+      "device": "Windows Laptop",
+      "deviceId": "user1-new-device",
+      "time": "18 Sep 2026 03:09 PM",
+      "details": "Failed password entry for user 7287954409"
+    },
+    {
+      "id": "sec_c1ed58a0ed1c",
+      "eventType": "Blocked login",
+      "userId": "7287954409",
+      "name": "Unknown",
+      "device": "Windows Laptop",
+      "deviceId": "user1-new-device",
+      "time": "18 Sep 2026 03:08 PM",
+      "details": "New device requires administrator approval"
+    },
+    {
+      "id": "sec_ce4459afe7ce",
+      "eventType": "New device detected",
+      "userId": "7287954409",
+      "name": "Unknown",
+      "device": "Windows Laptop",
+      "deviceId": "user1-new-device",
+      "time": "18 Sep 2026 03:08 PM",
+      "details": "New device detected for account 7287954409"
+    },
+    {
+      "id": "sec_4500d0ce7b6d",
+      "eventType": "Successful login",
+      "userId": "24MIC7312",
+      "name": "Super Administrator",
+      "device": "Admin PC",
+      "deviceId": "admin-test-device",
+      "time": "18 Sep 2026 03:08 PM",
+      "details": "Administrator logged into security control center"
+    },
+    {
+      "id": "sec_0c1ab6ea52a6",
+      "eventType": "Blocked login",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Windows Laptop",
+      "deviceId": "device_laptop_a_1111",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "Access attempted from revoked device"
+    },
+    {
+      "id": "sec_9073fda698fb",
+      "eventType": "Device revoked",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Windows Laptop",
+      "deviceId": "device_laptop_a_1111",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "Administrator revoked access for device: Windows Laptop"
+    },
+    {
+      "id": "sec_fa8cd8241f35",
+      "eventType": "Blocked login",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "iPad Tablet",
+      "deviceId": "device_tablet_c_3333",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "Device limit reached block"
+    },
+    {
+      "id": "sec_bfa32b144b03",
+      "eventType": "Device limit reached",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "iPad Tablet",
+      "deviceId": "device_tablet_c_3333",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "Login blocked: 2 approved devices already reached for USER001"
+    },
+    {
+      "id": "sec_c71d4ffe821d",
+      "eventType": "Successful login",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Android Phone",
+      "deviceId": "device_mobile_b_2222",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "User logged in from trusted approved device"
+    },
+    {
+      "id": "sec_7a266b90d8ce",
+      "eventType": "Device approved",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Android Phone",
+      "deviceId": "device_mobile_b_2222",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "Administrator confirmed approval for device Android Phone"
+    },
+    {
+      "id": "sec_b28d903c0033",
+      "eventType": "Blocked login",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Android Phone",
+      "deviceId": "device_mobile_b_2222",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "Login blocked: Device waiting for administrator approval"
+    },
+    {
+      "id": "sec_044323ec4707",
+      "eventType": "Approval requested",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Android Phone",
+      "deviceId": "device_mobile_b_2222",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "Approval request created with ID: req_7622713b3065"
+    },
+    {
+      "id": "sec_16d2f13c1076",
+      "eventType": "Name submitted",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Android Phone",
+      "deviceId": "device_mobile_b_2222",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "User entered display name: Santhosh Reddy"
+    },
+    {
+      "id": "sec_cac9121fcd97",
+      "eventType": "Blocked login",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Android Phone",
+      "deviceId": "device_mobile_b_2222",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "New device requires administrator approval"
+    },
+    {
+      "id": "sec_6ca4dffde53f",
+      "eventType": "New device detected",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Android Phone",
+      "deviceId": "device_mobile_b_2222",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "New device detected for account USER001"
+    },
+    {
+      "id": "sec_701981dff12c",
+      "eventType": "Successful login",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Windows Laptop",
+      "deviceId": "device_laptop_a_1111",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "User logged in from trusted approved device"
+    },
+    {
+      "id": "sec_4ae4ef6a993f",
+      "eventType": "Device approved",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Windows Laptop",
+      "deviceId": "device_laptop_a_1111",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "Administrator confirmed approval for device Windows Laptop"
+    },
+    {
+      "id": "sec_d9c304dfcb38",
+      "eventType": "Blocked login",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Windows Laptop",
+      "deviceId": "device_laptop_a_1111",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "Login blocked: Device waiting for administrator approval"
+    },
+    {
+      "id": "sec_2465a4598c21",
+      "eventType": "Approval requested",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Windows Laptop",
+      "deviceId": "device_laptop_a_1111",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "Approval request created with ID: req_d0fcb6ef6d52"
+    },
+    {
+      "id": "sec_636ffd587973",
+      "eventType": "Name submitted",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "device": "Windows Laptop",
+      "deviceId": "device_laptop_a_1111",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "User entered display name: Santhosh Reddy"
+    },
+    {
+      "id": "sec_1ec48330ec57",
+      "eventType": "Blocked login",
+      "userId": "USER001",
+      "name": "Unknown",
+      "device": "Windows Laptop",
+      "deviceId": "device_laptop_a_1111",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "New device requires administrator approval"
+    },
+    {
+      "id": "sec_8ad2f8de467c",
+      "eventType": "New device detected",
+      "userId": "USER001",
+      "name": "Unknown",
+      "device": "Windows Laptop",
+      "deviceId": "device_laptop_a_1111",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "New device detected for account USER001"
+    },
+    {
+      "id": "sec_5de345d21864",
+      "eventType": "Successful login",
+      "userId": "ADMIN001",
+      "name": "Super Administrator",
+      "device": "Admin Workstation",
+      "deviceId": "admin-console-001",
+      "time": "18 Sep 2026 03:00 PM",
+      "details": "Administrator logged into security control center"
+    }
+  ],
+  "activeSessions": {
+    "0783ebd92604bd43f4c9eb676592271f529690abe8cf58765f02fc221c0b5328": {
+      "token": "0783ebd92604bd43f4c9eb676592271f529690abe8cf58765f02fc221c0b5328",
+      "userId": "ADMIN001",
+      "name": "Super Administrator",
+      "role": "admin",
+      "deviceId": "admin-console-001",
+      "deviceType": "Desktop",
+      "friendlyName": "Admin Workstation",
+      "os": "Windows",
+      "browser": "Chrome",
+      "loginTime": "18 Sep 2026 03:00 PM",
+      "lastActive": "18 Sep 2026 03:00 PM"
+    },
+    "0d3a7dcda02328bc12a4b1f3b15bec97772274abb41f90056c4277a2417a7d31": {
+      "token": "0d3a7dcda02328bc12a4b1f3b15bec97772274abb41f90056c4277a2417a7d31",
+      "userId": "USER001",
+      "name": "Santhosh Reddy",
+      "role": "user",
+      "deviceId": "device_mobile_b_2222",
+      "deviceType": "Mobile",
+      "friendlyName": "Android Phone",
+      "os": "Android",
+      "browser": "Chrome",
+      "loginTime": "18 Sep 2026 03:00 PM",
+      "lastActive": "18 Sep 2026 03:00 PM"
+    },
+    "1531c4caaa5546abc7103d3ba1c35cfb47b121d3ff5fc49c1e401d49341338fd": {
+      "token": "1531c4caaa5546abc7103d3ba1c35cfb47b121d3ff5fc49c1e401d49341338fd",
+      "userId": "24MIC7312",
+      "name": "Super Administrator",
+      "role": "admin",
+      "deviceId": "admin-test-device",
+      "deviceType": "Desktop",
+      "friendlyName": "Admin Workstation",
+      "os": "Windows",
+      "browser": "Chrome",
+      "loginTime": "18 Sep 2026 03:08 PM",
+      "lastActive": "18 Sep 2026 03:08 PM"
+    },
+    "8c340e854a0bd1eeb3f16d44d15753e90cbe6f58088d2595308d7c9f0f3e0c63": {
+      "token": "8c340e854a0bd1eeb3f16d44d15753e90cbe6f58088d2595308d7c9f0f3e0c63",
+      "userId": "24MIC7312",
+      "name": "Super Administrator",
+      "role": "admin",
+      "deviceId": "3a7ac319-677d-49b0-a66e-91d4a0ee6167",
+      "deviceType": "Desktop",
+      "friendlyName": "Admin Workstation",
+      "os": "Windows 11/10",
+      "browser": "Chrome",
+      "loginTime": "18 Sep 2026 03:20 PM",
+      "lastActive": "18 Sep 2026 03:54 PM"
+    }
+  }
+}
