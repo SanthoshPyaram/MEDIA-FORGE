@@ -579,9 +579,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
 
       // Platform video (YouTube, Shorts) direct download trigger
       const ytId = getYouTubeVideoId(inputUrl.trim());
-      const helperUrl = ytId
-        ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
-        : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
+      const helperUrl = `https://cobalt.tools/`;
 
       const a = document.createElement('a');
       a.href = helperUrl;
@@ -653,9 +651,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
 
       // Static GitHub Pages fallback
       const ytId = getYouTubeVideoId(inputUrl.trim());
-      const helperUrl = ytId
-        ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
-        : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
+      const helperUrl = `https://cobalt.tools/`;
 
       const a = document.createElement('a');
       a.href = helperUrl;
@@ -683,10 +679,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setIsDownloadingAll(true);
     setUrlError(null);
 
-    const ytId = getYouTubeVideoId(inputUrl.trim());
-    const helperUrl = ytId
-      ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
-      : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
+    const helperUrl = `https://cobalt.tools/`;
 
     const a = document.createElement('a');
     a.href = helperUrl;
@@ -790,9 +783,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
 
       // Static hosting fallback
       const ytId = getYouTubeVideoId(inputUrl.trim());
-      const helperUrl = ytId
-        ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
-        : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
+      const helperUrl = `https://cobalt.tools/`;
 
       const a = document.createElement('a');
       a.href = helperUrl;
@@ -856,9 +847,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
       }
 
       const ytId = getYouTubeVideoId(inputUrl.trim());
-      const helperUrl = ytId
-        ? `https://10downloader.com/download?v=${encodeURIComponent(inputUrl.trim())}`
-        : `https://cobalt.tools/?url=${encodeURIComponent(inputUrl.trim())}`;
+      const helperUrl = `https://cobalt.tools/`;
 
       const a = document.createElement('a');
       a.href = helperUrl;
