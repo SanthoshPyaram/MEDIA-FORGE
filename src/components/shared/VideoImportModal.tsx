@@ -575,21 +575,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     }
   };
 
-  const INVIDIOUS_INSTANCES = [
-    'https://inv.nadeko.net',
-    'https://invidious.nerdvpn.de',
-    'https://invidious.privacydev.net',
-    'https://inv.tux.pizza',
-    'https://invidious.jing.rocks',
-  ];
-
-  const PIPED_INSTANCES = [
-    'https://pipedapi.kavin.rocks',
-    'https://api.piped.privacydev.net',
-    'https://pipedapi.tokhmi.xyz',
-  ];
-
-  // Helper to fetch media blob from direct URL, backend API, or stream instances
+  // Helper to fetch media blob from direct URL or local backend API
   const resolveMediaBlob = async (
     targetUrl: string,
     targetQuality = '720p',
@@ -636,64 +622,6 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
         }
       } catch (e) {
         console.warn('Local API download error:', e);
-      }
-    }
-
-    // 3. YouTube stream resolver via public APIs
-    const ytId = getYouTubeVideoId(cleanUrl);
-    if (ytId) {
-      // Try Invidious instances
-      for (const inst of INVIDIOUS_INSTANCES) {
-        try {
-          onProgress?.(`Connecting to stream resolver (${inst.replace('https://', '')})...`);
-          const ctrl = new AbortController();
-          const timeout = setTimeout(() => ctrl.abort(), 3500);
-          const res = await fetch(`${inst}/api/v1/videos/${ytId}`, { signal: ctrl.signal });
-          clearTimeout(timeout);
-          if (res.ok) {
-            const data = await res.json();
-            const streams = data.formatStreams || [];
-            let selected = streams.find((s: any) => s.resolution?.includes(targetQuality) || s.qualityLabel?.includes(targetQuality));
-            if (!selected && streams.length > 0) {
-              selected = streams[0];
-            }
-            if (selected?.url) {
-              onProgress?.('Downloading video stream into browser...');
-              const streamRes = await fetch(selected.url);
-              if (streamRes.ok) {
-                const blob = await streamRes.blob();
-                return { blob, title: data.title };
-              }
-            }
-          }
-        } catch (e) {}
-      }
-
-      // Try Piped instances
-      for (const inst of PIPED_INSTANCES) {
-        try {
-          onProgress?.(`Connecting to stream resolver (${inst.replace('https://', '')})...`);
-          const ctrl = new AbortController();
-          const timeout = setTimeout(() => ctrl.abort(), 3500);
-          const res = await fetch(`${inst}/streams/${ytId}`, { signal: ctrl.signal });
-          clearTimeout(timeout);
-          if (res.ok) {
-            const data = await res.json();
-            const streams = data.videoStreams || [];
-            let selected = streams.find((s: any) => s.quality?.includes(targetQuality) && !s.videoOnly);
-            if (!selected) {
-              selected = streams.find((s: any) => !s.videoOnly) || streams[0];
-            }
-            if (selected?.url) {
-              onProgress?.('Downloading video stream into browser...');
-              const streamRes = await fetch(selected.url);
-              if (streamRes.ok) {
-                const blob = await streamRes.blob();
-                return { blob, title: data.title };
-              }
-            }
-          }
-        } catch (e) {}
       }
     }
 
