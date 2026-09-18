@@ -167,24 +167,17 @@ const AppContent: React.FC = () => {
       data-workspace={currentView}
       className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#090d16] text-slate-900 dark:text-slate-100 transition-colors relative overflow-x-hidden"
     >
-      {/* Dynamic Animated Ambient Background Aura that smoothly shifts per Workspace */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 transition-opacity duration-1000">
+      {/* Dynamic Ambient Background Aura */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 transition-opacity duration-1000 opacity-25 dark:opacity-30">
         <div
-          className={`absolute -top-32 -right-32 w-80 h-80 sm:w-[560px] sm:h-[560px] rounded-full blur-[140px] transition-all duration-700 ease-in-out transform ${
-            currentView === 'admin' ? 'bg-rose-600/25' : currentTheme.ambientOrb1
+          className={`absolute -top-32 -right-32 w-80 h-80 sm:w-[500px] sm:h-[500px] rounded-full blur-[130px] transition-all duration-700 ${
+            currentView === 'admin' ? 'bg-rose-500/20' : currentTheme.ambientOrb1
           }`}
-          style={{ animation: 'float 9s ease-in-out infinite' }}
         />
         <div
-          className={`absolute top-1/3 -left-32 w-80 h-80 sm:w-[500px] sm:h-[500px] rounded-full blur-[140px] transition-all duration-700 ease-in-out transform ${
-            currentView === 'admin' ? 'bg-amber-600/20' : currentTheme.ambientOrb2
+          className={`absolute top-1/3 -left-32 w-80 h-80 sm:w-[450px] sm:h-[450px] rounded-full blur-[130px] transition-all duration-700 ${
+            currentView === 'admin' ? 'bg-amber-500/15' : currentTheme.ambientOrb2
           }`}
-          style={{ animation: 'float 11s ease-in-out infinite reverse' }}
-        />
-        <div
-          className={`absolute -bottom-40 right-1/4 w-72 h-72 sm:w-[440px] sm:h-[440px] rounded-full blur-[150px] transition-all duration-700 ease-in-out transform ${
-            currentView === 'admin' ? 'bg-red-600/20' : currentTheme.ambientOrb1
-          } opacity-40`}
         />
       </div>
 
@@ -239,39 +232,41 @@ const AppContent: React.FC = () => {
                 }}
               />
 
-              {/* Sign In to Access Banner for Unauthenticated Visitors */}
+              {/* Private Platform Access Card */}
               {!isAuthenticated && (
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 my-5">
-                  <div className="p-5 rounded-3xl bg-gradient-to-r from-emerald-950/70 via-slate-900/90 to-[#0c1420] border border-emerald-500/30 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 my-4">
+                  <div className="p-4 sm:p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800 shadow-sm backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
                     <div className="flex items-center gap-3.5">
-                      <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                        <Lock className="w-6 h-6" />
+                      <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200/60 dark:border-indigo-800/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                        <Lock className="w-4 h-4" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-white">Private Platform Access</span>
-                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            Only for specified users
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold text-slate-900 dark:text-white">
+                            Private Platform Access
+                          </span>
+                          <span className="text-[10px] font-medium tracking-wide px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            Authorized Users Only
                           </span>
                         </div>
-                        <p className="text-xs text-slate-300 mt-0.5">
-                          MediaForge is restricted to authorized accounts. Sign in to convert, process, and edit media files.
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          MediaForge is restricted to approved devices. Sign in to convert and process files.
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                       <button
                         onClick={() => openAuth('ADMIN')}
-                        className="px-3.5 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-bold transition-all cursor-pointer"
+                        className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium transition-all cursor-pointer whitespace-nowrap"
                       >
                         Admin Portal
                       </button>
                       <button
                         onClick={() => openAuth('USER')}
-                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:brightness-110 active:scale-95 text-white text-xs font-bold shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-1.5 cursor-pointer"
+                        className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white text-xs font-semibold shadow-sm shadow-indigo-600/25 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                       >
                         <Lock className="w-3.5 h-3.5" />
-                        <span>Sign In to Access</span>
+                        <span>Sign In</span>
                       </button>
                     </div>
                   </div>
@@ -487,7 +482,7 @@ const AppContent: React.FC = () => {
 
         {/* Security Gateway Modal (User Sign-In / Admin Control) */}
         {isAuthModalOpen && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
             <SecurityGateway
               initialPortal={authPortalMode}
               onClose={() => setIsAuthModalOpen(false)}

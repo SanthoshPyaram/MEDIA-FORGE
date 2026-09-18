@@ -15,6 +15,7 @@ import {
   Phone,
   Key,
   X,
+  ArrowRight,
 } from 'lucide-react';
 import { isBiometricSupported, verifyAdminBiometric } from '@/utils/biometricAuth';
 
@@ -110,7 +111,7 @@ export const SecurityGateway: React.FC<SecurityGatewayProps> = ({
         setScreen('DEVICE_REJECTED');
         break;
       default:
-        setErrorMessage(res.error || '❌ Invalid ID or password.');
+        setErrorMessage(res.error || 'Invalid ID or password.');
     }
   };
 
@@ -125,17 +126,17 @@ export const SecurityGateway: React.FC<SecurityGatewayProps> = ({
     try {
       const bioResult = await verifyAdminBiometric('24MIC7312');
       if (!bioResult.success) {
-        setErrorMessage(bioResult.error || 'Fingerprint verification failed.');
+        setErrorMessage(bioResult.error || 'Fingerprint verification cancelled.');
         setIsBiometricScanning(false);
         return;
       }
 
-      // Biometric scan succeeded on device, authenticate on server
+      // Biometric scan succeeded on device, authenticate
       const loginRes = await loginWithBiometric('24MIC7312');
       setIsBiometricScanning(false);
 
       if (!loginRes.success) {
-        setErrorMessage(loginRes.error || 'Server authentication failed.');
+        setErrorMessage(loginRes.error || 'Biometric authentication failed.');
       } else {
         onSuccess?.();
       }
@@ -178,482 +179,388 @@ export const SecurityGateway: React.FC<SecurityGatewayProps> = ({
     setIsCheckingStatus(false);
 
     if (res.status === 'approved') {
-      setStatusMessage('✓ Your device has been approved! Redirecting to MediaForge...');
-    } else if (res.status === 'pending') {
-      setStatusMessage('🟡 Waiting for administrator approval.');
+      onSuccess?.();
     } else if (res.status === 'rejected') {
-      setStatusMessage('❌ Your device request was rejected.');
       setScreen('DEVICE_REJECTED');
     } else if (res.status === 'revoked') {
-      setStatusMessage('🚫 Device access has been revoked.');
       setScreen('DEVICE_REVOKED');
     } else {
-      setStatusMessage('Unknown device status. Please try logging in again.');
+      setStatusMessage('Request is still pending administrator approval.');
     }
   };
 
   const handleResetToLogin = () => {
-    setPassword('');
+    setScreen('LOGIN');
     setErrorMessage(null);
     setStatusMessage(null);
-    setScreen('LOGIN');
   };
 
   const isAdminPortal = portal === 'ADMIN';
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#05080c] text-slate-100 relative overflow-hidden select-none">
-      {/* Dynamic Ambient Aura (Emerald for User, Rose for Admin) */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 transition-all duration-700">
-        <div
-          className={`absolute -top-32 -right-32 w-96 h-96 sm:w-[540px] sm:h-[540px] rounded-full blur-[150px] transition-all duration-700 ${
-            isAdminPortal ? 'bg-rose-600/15' : 'bg-emerald-500/15'
-          }`}
-          style={{ animation: 'float 10s ease-in-out infinite' }}
-        />
-        <div
-          className={`absolute top-1/2 -left-32 w-96 h-96 sm:w-[500px] sm:h-[500px] rounded-full blur-[150px] transition-all duration-700 ${
-            isAdminPortal ? 'bg-red-700/15' : 'bg-teal-600/15'
-          }`}
-          style={{ animation: 'float 12s ease-in-out infinite reverse' }}
-        />
-        <div
-          className={`absolute -bottom-40 right-1/4 w-80 h-80 rounded-full blur-[160px] transition-all duration-700 ${
-            isAdminPortal ? 'bg-amber-700/10' : 'bg-cyan-600/10'
-          }`}
-        />
+    <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-7 relative select-none animate-in zoom-in-95 duration-200 text-slate-900 dark:text-white">
+      {/* Close button */}
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+          title="Close dialog"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      )}
+
+      {/* Brand Icon & Heading */}
+      <div className="text-center space-y-1.5 mb-5">
+        <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/60 dark:border-indigo-800/60 text-indigo-600 dark:text-indigo-400 mb-1">
+          {isAdminPortal ? <Shield className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
+        </div>
+        <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+          {isAdminPortal ? 'Administrator Portal' : 'MediaForge Sign In'}
+        </h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {isAdminPortal
+            ? 'Restricted to system administrators'
+            : 'Private access for authorized personnel'}
+        </p>
       </div>
 
-      <div className="w-full max-w-md relative z-10 space-y-6">
-        {/* Brand Header */}
-        <div className="text-center space-y-2 relative">
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="absolute -top-2 right-0 p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
-              title="Close and return to Public Home"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
+      {/* Segmented Switcher: User vs Admin */}
+      <div className="flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl mb-5">
+        <button
+          type="button"
+          onClick={() => {
+            setPortal('USER');
+            setErrorMessage(null);
+          }}
+          className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            !isAdminPortal
+              ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+              : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+          }`}
+        >
+          <User className="w-3.5 h-3.5" />
+          <span>User Access</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setPortal('ADMIN');
+            setErrorMessage(null);
+          }}
+          className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            isAdminPortal
+              ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+              : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+          }`}
+        >
+          <Shield className="w-3.5 h-3.5" />
+          <span>Administrator</span>
+        </button>
+      </div>
 
-          <div
-            className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr ${
-              isAdminPortal
-                ? 'from-rose-600 via-red-500 to-amber-500 shadow-rose-500/25'
-                : 'from-emerald-500 via-teal-500 to-cyan-400 shadow-emerald-500/20'
-            } p-0.5 shadow-xl mb-1 transition-all duration-500`}
-          >
-            <div className="w-full h-full bg-[#090e15] rounded-[14px] flex items-center justify-center">
-              <Shield
-                className={`w-7 h-7 transition-colors duration-500 ${
-                  isAdminPortal ? 'text-rose-400' : 'text-emerald-400'
-                }`}
+      {/* ========================================================= */}
+      {/* SCREEN 1: LOGIN                                           */}
+      {/* ========================================================= */}
+      {screen === 'LOGIN' && (
+        <form onSubmit={handleLoginSubmit} className="space-y-4">
+          {/* User / Admin ID Input */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                {isAdminPortal ? 'Administrator ID' : 'User ID'}
+              </label>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                {isAdminPortal ? 'Admin Account' : 'Phone Number'}
+              </span>
+            </div>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                {isAdminPortal ? <Shield className="w-4 h-4 text-indigo-500" /> : <Phone className="w-4 h-4 text-indigo-500" />}
+              </div>
+              <input
+                type="text"
+                required
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
+                placeholder={isAdminPortal ? 'Enter Administrator ID' : 'Use your phone number'}
+                autoComplete="username"
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all font-mono"
               />
             </div>
           </div>
 
-          <div className="flex items-center justify-center">
-            {isAdminPortal ? (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-400 text-[11px] font-bold tracking-wide uppercase">
-                <Shield className="w-3.5 h-3.5" />
-                <span>Authorized Personnel Only</span>
+          {/* Password Input */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                Password
+              </label>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                {isAdminPortal ? 'Admin Passcode' : 'Registration Number'}
+              </span>
+            </div>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <Key className="w-4 h-4 text-indigo-500" />
               </div>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={isAdminPortal ? 'Enter Password' : 'Your registration number'}
+                autoComplete="current-password"
+                className="w-full pl-9 pr-10 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Error Notice */}
+          {errorMessage && (
+            <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-300 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={isSubmitting || !userId.trim() || !password}
+            className="w-full py-2.5 px-4 rounded-xl text-white font-semibold text-sm bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            {isSubmitting ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Verifying...</span>
+              </>
             ) : (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-bold tracking-wide uppercase">
-                <Lock className="w-3.5 h-3.5" />
-                <span>Only for specified users</span>
-              </div>
+              <span>{isAdminPortal ? 'Sign In as Administrator' : 'Sign In to MediaForge'}</span>
             )}
-          </div>
+          </button>
 
-          <h1
-            className={`text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r ${
-              isAdminPortal
-                ? 'from-white via-rose-100 to-red-300'
-                : 'from-white via-emerald-100 to-teal-300'
-            }`}
-          >
-            {isAdminPortal ? 'ADMINISTRATOR PORTAL' : 'MEDIAFORGE USER ACCESS'}
-          </h1>
-          <p className="text-xs text-slate-400">
-            {isAdminPortal
-              ? 'Restricted Access — Admin Credentials Required'
-              : 'Private Access Gateway — Enter Your Credentials to Continue'}
-          </p>
-        </div>
-
-        {/* ========================================================= */}
-        {/* SCREEN 1: LOGIN (CUSTOM USER VS ADMIN MODES)              */}
-        {/* ========================================================= */}
-        {screen === 'LOGIN' && (
-          <div
-            className={`p-7 rounded-3xl bg-[#090e15]/90 backdrop-blur-2xl border ${
-              isAdminPortal
-                ? 'border-rose-500/25 shadow-rose-950/40'
-                : 'border-emerald-500/20 shadow-emerald-950/40'
-            } shadow-2xl space-y-5 transition-colors duration-500`}
-          >
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
-              {/* User ID Field */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
-                    {isAdminPortal ? 'Administrator ID' : 'User ID'}
-                  </label>
-                  <span
-                    className={`text-[10px] font-medium ${
-                      isAdminPortal ? 'text-rose-400/80' : 'text-emerald-400/80'
-                    }`}
-                  >
-                    {isAdminPortal ? 'Admin Account' : 'Use Phone Number'}
-                  </span>
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                    {isAdminPortal ? <Shield className="w-4 h-4 text-rose-400" /> : <Phone className="w-4 h-4 text-emerald-400" />}
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={userId}
-                    onChange={(e) => setUserId(e.target.value)}
-                    placeholder={isAdminPortal ? 'Enter Administrator ID' : 'Use your phone number'}
-                    autoComplete="username"
-                    className={`w-full pl-10 pr-4 py-2.5 bg-[#05080c]/80 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 ${
-                      isAdminPortal
-                        ? 'focus:ring-rose-500/50 focus:border-rose-500'
-                        : 'focus:ring-emerald-500/50 focus:border-emerald-500'
-                    } transition-all font-mono`}
-                  />
-                </div>
-              </div>
-
-              {/* Password Field */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
-                    {isAdminPortal ? 'Administrator Password' : 'Password'}
-                  </label>
-                  <span className="text-[10px] text-slate-400 font-medium">
-                    {isAdminPortal ? 'Secret Passcode' : 'Registration Number'}
-                  </span>
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                    <Key className={`w-4 h-4 ${isAdminPortal ? 'text-rose-400' : 'text-emerald-400'}`} />
-                  </div>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder={isAdminPortal ? 'Enter Administrator Password' : 'Your registration number'}
-                    autoComplete="current-password"
-                    className={`w-full pl-10 pr-12 py-2.5 bg-[#05080c]/80 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 ${
-                      isAdminPortal
-                        ? 'focus:ring-rose-500/50 focus:border-rose-500'
-                        : 'focus:ring-emerald-500/50 focus:border-emerald-500'
-                    } transition-all font-mono`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Error Banner */}
-              {errorMessage && (
-                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-                  <span>{errorMessage}</span>
-                </div>
-              )}
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={isSubmitting || !userId.trim() || !password}
-                className={`w-full py-3 px-4 rounded-xl text-white font-bold text-sm shadow-lg hover:brightness-110 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${
-                  isAdminPortal
-                    ? 'bg-gradient-to-r from-rose-600 via-red-600 to-amber-600 shadow-rose-600/25 hover:shadow-rose-600/40'
-                    : 'bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 shadow-emerald-600/25 hover:shadow-emerald-600/40'
-                }`}
-              >
-                {isSubmitting ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Verifying Credentials...</span>
-                  </>
-                ) : (
-                  <span>{isAdminPortal ? 'SIGN IN AS ADMINISTRATOR' : 'SIGN IN TO MEDIAFORGE'}</span>
-                )}
-              </button>
-
-              {/* Biometric Fingerprint Option for Admin Portal */}
-              {isAdminPortal && biometricAvailable && (
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={handleBiometricAdminLogin}
-                    disabled={isBiometricScanning}
-                    className="w-full py-2.5 px-3 rounded-xl bg-rose-950/40 border border-rose-500/30 hover:bg-rose-900/40 hover:border-rose-400/50 text-rose-300 text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Fingerprint className={`w-4 h-4 text-rose-400 ${isBiometricScanning ? 'animate-pulse' : ''}`} />
-                    <span>
-                      {isBiometricScanning
-                        ? 'Scanning Fingerprint / Windows Hello...'
-                        : 'Admin Fingerprint / Windows Hello Login'}
-                    </span>
-                  </button>
-                </div>
-              )}
-
-              {/* Toggle Between User Sign-In and Admin Sign-In */}
-              <div className="pt-2 text-center">
-                {isAdminPortal ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPortal('USER');
-                      setErrorMessage(null);
-                      setUserId('');
-                      setPassword('');
-                    }}
-                    className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:underline inline-flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <span>← Are you a user? Sign in here</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPortal('ADMIN');
-                      setErrorMessage(null);
-                      setUserId('');
-                      setPassword('');
-                    }}
-                    className="text-xs font-semibold text-rose-400 hover:text-rose-300 hover:underline inline-flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <span>Are you an Admin? Sign in here</span>
-                    <span>→</span>
-                  </button>
-                )}
-              </div>
-            </form>
-
-            {/* Trusted Device Identity Badge */}
-            <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-              <span className="flex items-center gap-1.5">
-                <Laptop className={`w-3.5 h-3.5 ${isAdminPortal ? 'text-rose-400' : 'text-emerald-400'}`} />
-                <span>{deviceInfo.friendlyName || 'Current Device'}</span>
-              </span>
-              <span className="font-mono text-[10px] text-slate-400">
-                Trusted Device ID: {deviceInfo.deviceId.slice(0, 8)}...
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* SCREEN 2: NEW DEVICE DETECTED (NAME REQUEST)              */}
-        {/* ========================================================= */}
-        {screen === 'NEW_DEVICE_DETECTED' && (
-          <div className="p-7 rounded-3xl bg-[#090e15]/95 backdrop-blur-2xl border border-amber-500/40 shadow-2xl space-y-5">
-            <div className="text-center space-y-2">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
-                <Shield className="w-6 h-6" />
-              </div>
-              <h2 className="text-lg font-bold text-amber-300">🔐 NEW DEVICE DETECTED</h2>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Your account has not been approved on this device yet.
-                <br />
-                Please enter your name to request administrator approval.
-              </p>
-            </div>
-
-            <form onSubmit={handleRequestApproval} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={nameInput}
-                  onChange={(e) => setNameInput(e.target.value)}
-                  placeholder="Enter your full name"
-                  className="w-full px-4 py-2.5 bg-[#05080c]/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500"
-                />
-              </div>
-
-              {errorMessage && (
-                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs">
-                  {errorMessage}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={isSubmitting || !nameInput.trim()}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-orange-500 text-white font-bold text-sm shadow-lg shadow-amber-600/30 hover:brightness-110 transition-all flex items-center justify-center gap-2"
-              >
-                {isSubmitting ? 'Submitting Request...' : 'REQUEST APPROVAL'}
-              </button>
-
+          {/* Biometric Fingerprint Option for Admin */}
+          {isAdminPortal && biometricAvailable && (
+            <div className="pt-1">
               <button
                 type="button"
-                onClick={handleResetToLogin}
-                className="w-full py-2 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                onClick={handleBiometricAdminLogin}
+                disabled={isBiometricScanning}
+                className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300 text-xs font-medium transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                Back to Login
+                <Fingerprint className={`w-4 h-4 text-indigo-500 ${isBiometricScanning ? 'animate-pulse' : ''}`} />
+                <span>
+                  {isBiometricScanning
+                    ? 'Scanning Fingerprint / Windows Hello...'
+                    : 'Fingerprint / Windows Hello Login'}
+                </span>
               </button>
-            </form>
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* SCREEN 3: WAITING FOR APPROVAL                            */}
-        {/* ========================================================= */}
-        {screen === 'WAITING_APPROVAL' && (
-          <div className="p-7 rounded-3xl bg-[#090e15]/95 backdrop-blur-2xl border border-emerald-500/30 shadow-2xl space-y-5 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
-              <CheckCircle2 className="w-6 h-6" />
             </div>
+          )}
 
+          {/* Device Identifier Footer */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <Laptop className="w-3.5 h-3.5 text-slate-400" />
+              <span>{deviceInfo.friendlyName || 'Current Device'}</span>
+            </span>
+            <span className="font-mono text-[10px]">
+              ID: {deviceInfo.deviceId.slice(0, 8)}...
+            </span>
+          </div>
+        </form>
+      )}
+
+      {/* ========================================================= */}
+      {/* SCREEN 2: NEW DEVICE DETECTED (NAME INPUT)                */}
+      {/* ========================================================= */}
+      {screen === 'NEW_DEVICE_DETECTED' && (
+        <div className="space-y-4">
+          <div className="text-center space-y-1.5">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60 flex items-center justify-center mx-auto text-amber-600 dark:text-amber-400">
+              <Shield className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">New Device Detected</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              This device hasn't been approved yet. Enter your name to request administrator approval.
+            </p>
+          </div>
+
+          <form onSubmit={handleRequestApproval} className="space-y-3">
             <div className="space-y-1">
-              <h2 className="text-lg font-bold text-emerald-400">✓ REQUEST SENT</h2>
-              <p className="text-sm font-semibold text-white">Hello {submittedName}.</p>
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                Full Name
+              </label>
+              <input
+                type="text"
+                required
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                placeholder="Enter your full name"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"
+              />
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Your details and device information have been sent to the administrator.
-              <br />
-              You can use MediaForge after the administrator approves this device.
-            </p>
-
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 inline-flex items-center gap-2 text-xs font-semibold text-amber-300">
-              <span>Status:</span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                <span>🟡 WAITING FOR APPROVAL</span>
-              </span>
-            </div>
-
-            {statusMessage && (
-              <div className="p-3 rounded-xl bg-slate-850 text-xs text-cyan-300">
-                {statusMessage}
+            {errorMessage && (
+              <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-300 text-xs">
+                {errorMessage}
               </div>
             )}
 
-            <div className="pt-3 space-y-2">
-              <button
-                type="button"
-                onClick={handleCheckStatus}
-                disabled={isCheckingStatus}
-                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2"
-              >
-                {isCheckingStatus ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Checking...</span>
-                  </>
-                ) : (
-                  <span>CHECK STATUS</span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleResetToLogin}
-                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
-              >
-                LOGOUT
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* SCREEN 4: MAXIMUM 2 DEVICES LIMIT REACHED                 */}
-        {/* ========================================================= */}
-        {screen === 'DEVICE_LIMIT_REACHED' && (
-          <div className="p-7 rounded-3xl bg-[#090e15]/95 backdrop-blur-2xl border border-red-500/40 shadow-2xl space-y-5 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center mx-auto text-red-400">
-              <XCircle className="w-6 h-6" />
-            </div>
-
-            <h2 className="text-lg font-bold text-red-400">🚫 DEVICE LIMIT REACHED</h2>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Your account already has 2 approved devices.
-              <br />
-              Ask the administrator to revoke an existing device before adding another.
-            </p>
+            <button
+              type="submit"
+              disabled={isSubmitting || !nameInput.trim()}
+              className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shadow-sm shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {isSubmitting ? 'Submitting Request...' : 'Request Device Approval'}
+            </button>
 
             <button
               type="button"
               onClick={handleResetToLogin}
-              className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-colors"
+              className="w-full py-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition-colors cursor-pointer"
             >
-              LOGOUT
+              Back to Login
             </button>
+          </form>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* SCREEN 3: WAITING FOR APPROVAL                            */}
+      {/* ========================================================= */}
+      {screen === 'WAITING_APPROVAL' && (
+        <div className="space-y-4 text-center">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-center mx-auto text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="w-5 h-5" />
           </div>
-        )}
 
-        {/* ========================================================= */}
-        {/* SCREEN 5: DEVICE REVOKED                                  */}
-        {/* ========================================================= */}
-        {screen === 'DEVICE_REVOKED' && (
-          <div className="p-7 rounded-3xl bg-[#090e15]/95 backdrop-blur-2xl border border-red-600/50 shadow-2xl space-y-5 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-red-500/15 border border-red-500/40 flex items-center justify-center mx-auto text-red-400">
-              <XCircle className="w-6 h-6" />
-            </div>
-
-            <h2 className="text-lg font-bold text-red-400">🚫 ACCESS REVOKED</h2>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Access from this device has been revoked by the administrator.
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">Request Submitted</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Hello <strong className="font-semibold text-slate-800 dark:text-slate-200">{submittedName}</strong>. Your device request is awaiting administrator approval.
             </p>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 inline-flex items-center gap-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            <span>Status: Pending Approval</span>
+          </div>
+
+          {statusMessage && (
+            <p className="text-xs text-slate-600 dark:text-slate-400">{statusMessage}</p>
+          )}
+
+          <div className="pt-2 space-y-2">
+            <button
+              type="button"
+              onClick={handleCheckStatus}
+              disabled={isCheckingStatus}
+              className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-sm shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {isCheckingStatus ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Checking Status...</span>
+                </>
+              ) : (
+                <span>Check Approval Status</span>
+              )}
+            </button>
 
             <button
               type="button"
               onClick={handleResetToLogin}
-              className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-colors"
+              className="w-full py-2 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition-colors cursor-pointer"
             >
-              BACK TO LOGIN
+              Back to Login
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ========================================================= */}
-        {/* SCREEN 6: DEVICE REQUEST REJECTED                         */}
-        {/* ========================================================= */}
-        {screen === 'DEVICE_REJECTED' && (
-          <div className="p-7 rounded-3xl bg-[#090e15]/95 backdrop-blur-2xl border border-red-600/50 shadow-2xl space-y-5 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-red-500/15 border border-red-500/40 flex items-center justify-center mx-auto text-red-400">
-              <XCircle className="w-6 h-6" />
-            </div>
-
-            <h2 className="text-lg font-bold text-red-400">❌ REQUEST REJECTED</h2>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Your device request was rejected by the administrator.
-            </p>
-
-            <button
-              type="button"
-              onClick={handleResetToLogin}
-              className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-colors"
-            >
-              BACK TO LOGIN
-            </button>
+      {/* ========================================================= */}
+      {/* SCREEN 4: MAXIMUM 2 DEVICES REACHED                       */}
+      {/* ========================================================= */}
+      {screen === 'DEVICE_LIMIT_REACHED' && (
+        <div className="space-y-4 text-center">
+          <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900/50 flex items-center justify-center mx-auto text-red-500">
+            <XCircle className="w-5 h-5" />
           </div>
-        )}
-      </div>
+
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">Device Limit Reached</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Your account already has 2 approved devices. Contact the administrator to revoke an existing device.
+          </p>
+
+          <button
+            type="button"
+            onClick={handleResetToLogin}
+            className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-colors cursor-pointer"
+          >
+            Back to Login
+          </button>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* SCREEN 5: DEVICE REVOKED                                  */}
+      {/* ========================================================= */}
+      {screen === 'DEVICE_REVOKED' && (
+        <div className="space-y-4 text-center">
+          <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900/50 flex items-center justify-center mx-auto text-red-500">
+            <XCircle className="w-5 h-5" />
+          </div>
+
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">Access Revoked</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Access from this device has been revoked by the administrator.
+          </p>
+
+          <button
+            type="button"
+            onClick={handleResetToLogin}
+            className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-colors cursor-pointer"
+          >
+            Back to Login
+          </button>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* SCREEN 6: DEVICE REJECTED                                 */}
+      {/* ========================================================= */}
+      {screen === 'DEVICE_REJECTED' && (
+        <div className="space-y-4 text-center">
+          <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900/50 flex items-center justify-center mx-auto text-red-500">
+            <XCircle className="w-5 h-5" />
+          </div>
+
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">Request Rejected</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Your device access request was not approved by the administrator.
+          </p>
+
+          <button
+            type="button"
+            onClick={handleResetToLogin}
+            className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-colors cursor-pointer"
+          >
+            Back to Login
+          </button>
+        </div>
+      )}
     </div>
   );
 };
+export default SecurityGateway;

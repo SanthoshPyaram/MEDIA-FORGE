@@ -346,9 +346,62 @@ function securityAuthPlugin(): Plugin {
   };
 }
 
+function loadClientAuthVault() {
+  const envPath = path.resolve(__dirname, '.env');
+  const vault: {
+    adminId: string;
+    adminPasswordHash: string;
+    users: Record<string, { id: string; passwordHash: string; name: string }>;
+  } = {
+    adminId: '24MIC7312',
+    adminPasswordHash: '3e94644ab2465fa603d3018413e090e7be31c99c8d77d7f6da2684117d321c33',
+    users: {
+      '7287954409': { id: '7287954409', passwordHash: '3289a38986bf24475396fef339666851b02204341644c41bba5aae7c0de48ab3', name: 'User 7287954409' },
+      '7093340881': { id: '7093340881', passwordHash: 'f9ebea1dcd4d81193c58560292fd07f874b33c51ee5f3922ba44debaf1d40c18', name: 'User 7093340881' },
+      '9618197585': { id: '9618197585', passwordHash: 'd1c46a8408f7b745d0808d5d7963cc1bfcd2456486013bb11df3566ffcc60210', name: 'User 9618197585' },
+      '9676410015': { id: '9676410015', passwordHash: 'd8630d43a4b5a9589432074ffc2be811550ea1c3640b5577d095193a520df6fa', name: 'User 9676410015' },
+      '6281394149': { id: '6281394149', passwordHash: '891bb62a83bf5568a4cea58531f88158a166756f9f11e76bae1fd00227e99ede', name: 'User 6281394149' },
+    },
+  };
+
+  if (fs.existsSync(envPath)) {
+    const lines = fs.readFileSync(envPath, 'utf8').split('\n');
+    const parsed: Record<string, string> = {};
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const idx = trimmed.indexOf('=');
+      if (idx !== -1) {
+        parsed[trimmed.slice(0, idx).trim()] = trimmed.slice(idx + 1).trim();
+      }
+    }
+
+    if (parsed['ADMIN_ID']) vault.adminId = parsed['ADMIN_ID'];
+    if (parsed['ADMIN_PASSWORD_HASH']) vault.adminPasswordHash = parsed['ADMIN_PASSWORD_HASH'];
+
+    for (let i = 1; i <= 50; i++) {
+      const idKey = `USER_${i}_ID`;
+      const hashKey = `USER_${i}_PASSWORD_HASH`;
+      if (parsed[idKey] && parsed[hashKey]) {
+        const uId = parsed[idKey];
+        vault.users[uId] = {
+          id: uId,
+          passwordHash: parsed[hashKey],
+          name: `User ${uId}`,
+        };
+      }
+    }
+  }
+
+  return vault;
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
+  define: {
+    __MEDIAFORGE_AUTH_VAULT__: JSON.stringify(loadClientAuthVault()),
+  },
   plugins: [react(), videoImportPlugin(), securityAuthPlugin()],
   resolve: {
     alias: {
@@ -388,3 +441,4 @@ export default defineConfig({
     },
   },
 })
+

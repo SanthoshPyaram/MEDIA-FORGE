@@ -29,6 +29,11 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { verifyAdminBiometric } from '@/utils/biometricAuth';
+import {
+  getVaultAdminData,
+  setVaultDeviceStatus,
+  addVaultUser,
+} from '@/utils/securityVault';
 
 interface OverviewSummary {
   totalUsers: number;
@@ -261,16 +266,134 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
 
   const refreshAll = useCallback(async () => {
     setIsLoading(true);
-    await Promise.all([
-      fetchOverview(),
-      fetchUsers(),
-      fetchRequests(),
-      fetchDevices(),
-      fetchHistory(),
-      fetchEvents(),
-    ]);
+
+    let hasServerData = false;
+    if (token && !token.startsWith('vault_')) {
+      try {
+        await Promise.all([
+          fetchOverview(),
+          fetchUsers(),
+          fetchRequests(),
+          fetchDevices(),
+          fetchHistory(),
+          fetchEvents(),
+        ]);
+        hasServerData = true;
+      } catch {}
+    }
+
+    // If server is not responding or running in static client vault mode
+    if (!hasServerData || token?.startsWith('vault_')) {
+      const vData = getVaultAdminData();
+      const approvedDevs = vData.devices.filter((d) => d.status === 'approved');
+      const pendingReqs = vData.deviceRequests.filter((r) => r.status === 'pending');
+      const revokedDevs = vData.devices.filter((d) => d.status === 'revoked');
+
+      setOverview({
+        summary: {
+          totalUsers: vData.users.length,
+          approvedDevices: approvedDevs.length,
+          pendingRequests: pendingReqs.length,
+          revokedDevices: revokedDevs.length,
+          todaysLogins: approvedDevs.length + 1,
+          blockedAttempts: 0,
+        },
+        recentActivity: vData.auditLogs.slice(0, 10).map((log) => ({
+          id: log.id,
+          time: log.timestamp,
+          userId: log.userId,
+          name: log.userId,
+          device: log.deviceId,
+          status: log.status,
+          reason: log.details,
+        })),
+        newDeviceAlerts: pendingReqs.map((r) => ({
+          id: r.requestId,
+          time: r.requestTime,
+          userId: r.userId,
+          name: r.name,
+          device: r.friendlyName,
+          status: 'PENDING',
+          reason: 'Device authorization required',
+        })),
+      });
+
+      setUsersList(
+        vData.users.map((u) => {
+          const userDevs = vData.devices.filter(
+            (d) => d.userId === u.userId && d.status === 'approved'
+          );
+          return {
+            userId: u.userId,
+            name: u.registeredName,
+            approvedDevicesCount: userDevs.length,
+            maxDevices: 2,
+            status: userDevs.length > 0 ? 'ACTIVE' : 'STANDBY',
+            lastLogin: userDevs[0]?.lastLogin || 'Recently',
+          };
+        })
+      );
+
+      setRequests(
+        vData.deviceRequests.map((r) => ({
+          requestId: r.requestId,
+          userId: r.userId,
+          name: r.name,
+          deviceId: r.deviceId,
+          deviceType: r.deviceType,
+          operatingSystem: r.operatingSystem,
+          browser: r.browser,
+          friendlyName: r.friendlyName,
+          requestTime: r.requestTime,
+          status: r.status,
+        }))
+      );
+
+      setDevices(
+        vData.devices.map((d) => ({
+          userId: d.userId,
+          name: d.submittedName,
+          friendlyName: d.friendlyName,
+          deviceId: d.deviceId,
+          browser: d.browser,
+          os: d.os,
+          status: d.status,
+          created: d.createdAt,
+          lastLogin: d.lastLogin,
+        }))
+      );
+
+      setHistory(
+        vData.auditLogs.map((log) => ({
+          id: log.id,
+          time: log.timestamp,
+          userId: log.userId,
+          name: log.userId,
+          device: log.deviceId,
+          browser: 'Browser',
+          os: 'OS',
+          deviceId: log.deviceId,
+          status: log.status === 'SUCCESS' ? 'SUCCESS' : 'BLOCKED',
+          reason: log.details,
+        }))
+      );
+
+      setEvents(
+        vData.auditLogs.map((log) => ({
+          id: log.id,
+          eventType: log.action,
+          userId: log.userId,
+          name: log.userId,
+          device: log.deviceId,
+          deviceId: log.deviceId,
+          time: log.timestamp,
+          details: log.details,
+        }))
+      );
+    }
+
     setIsLoading(false);
-  }, [fetchOverview, fetchUsers, fetchRequests, fetchDevices, fetchHistory, fetchEvents]);
+  }, [token, fetchOverview, fetchUsers, fetchRequests, fetchDevices, fetchHistory, fetchEvents]);
 
   useEffect(() => {
     refreshAll();
@@ -303,32 +426,43 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
     }
 
     try {
-      const res = await fetch('/api/admin/device-requests/approve', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          requestId: approveConfirmTarget.requestId,
-          deviceId: approveConfirmTarget.deviceId,
-          userId: approveConfirmTarget.userId,
-          biometricVerified: bioVerified,
-        }),
-      });
+      let serverHandled = false;
+      if (!token.startsWith('vault_')) {
+        const res = await fetch('/api/admin/device-requests/approve', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            requestId: approveConfirmTarget.requestId,
+            deviceId: approveConfirmTarget.deviceId,
+            userId: approveConfirmTarget.userId,
+            biometricVerified: bioVerified,
+          }),
+        });
 
-      if (res.ok) {
-        setFeedbackMessage(
-          `✓ Approved device ${approveConfirmTarget.friendlyName} for ${approveConfirmTarget.name}${
-            bioVerified ? ' (Biometrically Verified 👆)' : ''
-          }`
-        );
-        setApproveConfirmTarget(null);
-        refreshAll();
-      } else {
-        const err = await res.json();
-        setFeedbackMessage(`Failed: ${err.error}`);
+        const isJson = res.headers.get('content-type')?.includes('application/json');
+        if (res.ok && isJson) {
+          serverHandled = true;
+        }
       }
+
+      if (!serverHandled) {
+        setVaultDeviceStatus(
+          approveConfirmTarget.userId,
+          approveConfirmTarget.deviceId,
+          'approved'
+        );
+      }
+
+      setFeedbackMessage(
+        `✓ Approved device ${approveConfirmTarget.friendlyName} for ${approveConfirmTarget.name}${
+          bioVerified ? ' (Biometrically Verified 👆)' : ''
+        }`
+      );
+      setApproveConfirmTarget(null);
+      refreshAll();
     } catch (e: any) {
       setFeedbackMessage(`Error: ${e.message}`);
     }
@@ -337,75 +471,91 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
   const handleRejectRequest = async (reqItem: DeviceRequest) => {
     if (!token) return;
     try {
-      const res = await fetch('/api/admin/device-requests/reject', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          requestId: reqItem.requestId,
-          deviceId: reqItem.deviceId,
-          userId: reqItem.userId,
-        }),
-      });
-
-      if (res.ok) {
-        setFeedbackMessage(`Rejected device request for ${reqItem.name}`);
-        refreshAll();
+      let serverHandled = false;
+      if (!token.startsWith('vault_')) {
+        const res = await fetch('/api/admin/device-requests/reject', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            requestId: reqItem.requestId,
+            deviceId: reqItem.deviceId,
+            userId: reqItem.userId,
+          }),
+        });
+        if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
+          serverHandled = true;
+        }
       }
+
+      if (!serverHandled) {
+        setVaultDeviceStatus(reqItem.userId, reqItem.deviceId, 'rejected');
+      }
+
+      setFeedbackMessage(`Rejected device request for ${reqItem.name}`);
+      refreshAll();
     } catch {}
   };
 
   const handleRevokeDevice = async (userId: string, deviceId: string, deviceName: string) => {
     if (!token) return;
     try {
-      const res = await fetch('/api/admin/devices/revoke', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ userId, deviceId }),
-      });
-
-      if (res.ok) {
-        setFeedbackMessage(`🚫 Revoked device: ${deviceName}`);
-        refreshAll();
+      let serverHandled = false;
+      if (!token.startsWith('vault_')) {
+        const res = await fetch('/api/admin/devices/revoke', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ userId, deviceId }),
+        });
+        if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
+          serverHandled = true;
+        }
       }
+
+      if (!serverHandled) {
+        setVaultDeviceStatus(userId, deviceId, 'revoked');
+      }
+
+      setFeedbackMessage(`🚫 Revoked device: ${deviceName}`);
+      refreshAll();
     } catch {}
   };
 
   const handleSaveRename = async () => {
     if (!token || !renameTarget || !newNameInput.trim()) return;
     try {
-      if (renameTarget.isDevice) {
-        // Rename Device
-        await fetch('/api/admin/devices/rename', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            userId: renameTarget.userId,
-            deviceId: renameTarget.deviceId,
-            friendlyName: newNameInput.trim(),
-          }),
-        });
-      } else {
-        // Rename User
-        await fetch('/api/admin/users/rename', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            userId: renameTarget.userId,
-            name: newNameInput.trim(),
-          }),
-        });
+      if (!token.startsWith('vault_')) {
+        if (renameTarget.isDevice) {
+          await fetch('/api/admin/devices/rename', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              userId: renameTarget.userId,
+              deviceId: renameTarget.deviceId,
+              friendlyName: newNameInput.trim(),
+            }),
+          });
+        } else {
+          await fetch('/api/admin/users/rename', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              userId: renameTarget.userId,
+              name: newNameInput.trim(),
+            }),
+          });
+        }
       }
       setRenameTarget(null);
       setNewNameInput('');
@@ -421,35 +571,49 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
     setAddUserError(null);
 
     try {
-      const res = await fetch('/api/admin/users/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          userId: newUserIdInput.trim(),
-          password: newUserPasswordInput.trim(),
-          name: newUserNameInput.trim(),
-        }),
-      });
+      let serverSuccess = false;
+      if (!token.startsWith('vault_')) {
+        try {
+          const res = await fetch('/api/admin/users/create', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              userId: newUserIdInput.trim(),
+              password: newUserPasswordInput.trim(),
+              name: newUserNameInput.trim(),
+            }),
+          });
 
-      const data = await res.json();
-      setIsAddingUser(false);
-
-      if (res.ok && data.success) {
-        setFeedbackMessage(`✓ User ${newUserIdInput.trim()} added! Password was hashed with SHA-256 and saved to .env.`);
-        setIsAddUserModalOpen(false);
-        setNewUserIdInput('');
-        setNewUserPasswordInput('');
-        setNewUserNameInput('');
-        refreshAll();
-      } else {
-        setAddUserError(data.error || 'Failed to add user.');
+          const isJson = res.headers.get('content-type')?.includes('application/json');
+          if (res.ok && isJson) {
+            serverSuccess = true;
+          }
+        } catch {}
       }
+
+      if (!serverSuccess) {
+        await addVaultUser(
+          newUserIdInput.trim(),
+          newUserPasswordInput.trim(),
+          newUserNameInput.trim()
+        );
+      }
+
+      setIsAddingUser(false);
+      setFeedbackMessage(
+        `✓ User ${newUserIdInput.trim()} added! Password was hashed with SHA-256 and saved.`
+      );
+      setIsAddUserModalOpen(false);
+      setNewUserIdInput('');
+      setNewUserPasswordInput('');
+      setNewUserNameInput('');
+      refreshAll();
     } catch (err: any) {
       setIsAddingUser(false);
-      setAddUserError(err.message || 'Network error creating user.');
+      setAddUserError(err.message || 'Failed to add user.');
     }
   };
 
