@@ -136,7 +136,7 @@ type AdminSection =
   | 'events';
 
 export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBackToHome }) => {
-  const { token } = useAuth();
+  const { token, registerFailedAttempt, resetFailedAttempts } = useAuth();
 
   const [activeSection, setActiveSection] = useState<AdminSection>('dashboard');
 
@@ -510,6 +510,7 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
     const code = (enteredPasskey !== undefined ? enteredPasskey : pinDigits.join('')).trim();
 
     if (code !== '630211') {
+      registerFailedAttempt('Wrong admin passkey entered');
       setPasskeyError('Invalid authorization passkey. Please check the code and try again.');
       setPinDigits(['', '', '', '', '', '']);
       setTimeout(() => {
@@ -518,6 +519,7 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
       return;
     }
 
+    resetFailedAttempts();
     setIsApproving(true);
     setPasskeyError(null);
     const targetReq = approveConfirmTarget;

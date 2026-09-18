@@ -27,7 +27,7 @@ import { SecurityGateway } from '@/components/auth/SecurityGateway';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { useJobQueue } from '@/context/JobQueueContext';
 import { DetectedFileInfo } from '@/types/job';
-import { AlertCircle, ChevronDown, ChevronUp, RefreshCw, ShieldAlert, Lock } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, RefreshCw, ShieldAlert, Lock, X } from 'lucide-react';
 import { getWorkspaceTheme } from '@/lib/theme/workspaceThemes';
 
 const getInitialView = (): string => {
@@ -46,7 +46,7 @@ const getInitialView = (): string => {
 };
 
 const AppContent: React.FC = () => {
-  const { isAuthenticated, isLoading, isAdmin, user } = useAuth();
+  const { isAuthenticated, isLoading, isAdmin, user, securityAlert, clearSecurityAlert } = useAuth();
 
   const [currentView, setCurrentView] = useState<string>(getInitialView);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
@@ -245,6 +245,21 @@ const AppContent: React.FC = () => {
 
       <div className="relative z-10 flex flex-col min-h-screen">
         <CompatibilityBanner />
+        {securityAlert && (
+          <div className="bg-gradient-to-r from-amber-950/90 via-rose-950/90 to-red-950/90 border-b border-rose-500/40 px-4 py-2.5 text-xs text-rose-200 flex items-center justify-between gap-3 shadow-lg shadow-rose-950/40 animate-fade-in">
+            <div className="flex items-center gap-2.5 max-w-4xl mx-auto">
+              <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 animate-pulse" />
+              <span className="font-semibold">{securityAlert}</span>
+            </div>
+            <button
+              onClick={clearSecurityAlert}
+              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              title="Dismiss alert"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         <Header
           currentView={currentView}
           onNavigate={handleNavigate}

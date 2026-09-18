@@ -38,7 +38,15 @@ export const SecurityGateway: React.FC<SecurityGatewayProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const { login, loginWithBiometric, requestDeviceApproval, checkDeviceStatus, deviceInfo } = useAuth();
+  const {
+    login,
+    loginWithBiometric,
+    requestDeviceApproval,
+    checkDeviceStatus,
+    deviceInfo,
+    registerFailedAttempt,
+    resetFailedAttempts,
+  } = useAuth();
 
   // Portal State: USER vs ADMIN
   const [portal, setPortal] = useState<'USER' | 'ADMIN'>(initialPortal);
@@ -87,6 +95,7 @@ export const SecurityGateway: React.FC<SecurityGatewayProps> = ({
     setIsSubmitting(false);
 
     if (res.success) {
+      resetFailedAttempts();
       onSuccess?.();
       return;
     }
@@ -103,14 +112,17 @@ export const SecurityGateway: React.FC<SecurityGatewayProps> = ({
         setScreen('DEVICE_LIMIT_REACHED');
         break;
       case 'DEVICE_REVOKED':
+        registerFailedAttempt('Revoked device login attempt');
         setErrorMessage(res.error || 'Access from this device has been revoked by the administrator.');
         setScreen('DEVICE_REVOKED');
         break;
       case 'DEVICE_REJECTED':
+        registerFailedAttempt('Rejected device login attempt');
         setErrorMessage(res.error || 'Your device request was rejected.');
         setScreen('DEVICE_REJECTED');
         break;
       default:
+        registerFailedAttempt('Invalid ID or password');
         setErrorMessage(res.error || 'Invalid ID or password.');
     }
   };
@@ -126,6 +138,7 @@ export const SecurityGateway: React.FC<SecurityGatewayProps> = ({
     try {
       const bioResult = await verifyAdminBiometric('24MIC7312');
       if (!bioResult.success) {
+        registerFailedAttempt('Biometric verification failed');
         setErrorMessage(bioResult.error || 'Fingerprint verification cancelled.');
         setIsBiometricScanning(false);
         return;
@@ -136,12 +149,15 @@ export const SecurityGateway: React.FC<SecurityGatewayProps> = ({
       setIsBiometricScanning(false);
 
       if (!loginRes.success) {
+        registerFailedAttempt('Biometric authentication rejected');
         setErrorMessage(loginRes.error || 'Biometric authentication failed.');
       } else {
+        resetFailedAttempts();
         onSuccess?.();
       }
     } catch (err: any) {
       setIsBiometricScanning(false);
+      registerFailedAttempt('Biometric verification error');
       setErrorMessage(err.message || 'Biometric authentication error.');
     }
   };

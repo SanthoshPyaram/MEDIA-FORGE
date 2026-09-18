@@ -471,6 +471,16 @@ export function setVaultDeviceStatus(
   return { success: true, status };
 }
 
+export function recordVaultSecurityEvent(
+  action: string,
+  userId: string,
+  deviceId: string,
+  details: string,
+  status: 'SUCCESS' | 'BLOCKED' | 'WARNING' = 'WARNING'
+) {
+  logAuditEvent(action, userId, deviceId, details, status);
+}
+
 function logAuditEvent(
   action: string,
   userId: string,

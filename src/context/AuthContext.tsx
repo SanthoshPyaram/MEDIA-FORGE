@@ -10,6 +10,7 @@ import {
   requestDeviceApprovalInVault,
   checkDeviceStatusInVault,
   getActiveVault,
+  recordVaultSecurityEvent,
 } from '@/utils/securityVault';
 
 export interface AuthUser {
@@ -58,7 +59,12 @@ interface AuthContextType {
     name: string
   ) => Promise<{ success: boolean; status?: string; name?: string; error?: string }>;
   checkDeviceStatus: (userId: string) => Promise<DeviceStatusResult>;
+  securityAlert: string | null;
+  clearSecurityAlert: () => void;
+  registerFailedAttempt: (context?: string) => void;
+  resetFailedAttempts: () => void;
   logout: () => Promise<void>;
+  logoutWithReason: (reason: string) => Promise<void>;
   refreshSession: () => Promise<void>;
 }
 
@@ -66,24 +72,44 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const TOKEN_STORAGE_KEY = 'mediaforge_auth_session_token';
 const USER_STORAGE_KEY = 'mediaforge_auth_session_user';
+const SECURITY_ALERT_KEY = 'mediaforge_security_alert_msg';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [deviceInfo, setDeviceInfo] = useState<ClientDeviceInfo>(() => captureClientDeviceInfo());
+  const [securityAlert, setSecurityAlert] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem(SECURITY_ALERT_KEY);
+    } catch {
+      return null;
+    }
+  });
 
-  // Initialize Trusted Device ID and verify existing session
+  const clearSecurityAlert = useCallback(() => {
+    setSecurityAlert(null);
+    try {
+      sessionStorage.removeItem(SECURITY_ALERT_KEY);
+    } catch {}
+  }, []);
+
+  // Initialize Trusted Device ID and verify strictly ephemeral session
   useEffect(() => {
     async function initDevice() {
+      // Purge any legacy localStorage tokens so exiting the browser/tab always signs out
+      try {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        localStorage.removeItem(USER_STORAGE_KEY);
+      } catch {}
+
       const trustedId = await getTrustedDeviceId();
       const updatedInfo = captureClientDeviceInfo(trustedId);
       setDeviceInfo(updatedInfo);
 
-      const savedToken =
-        sessionStorage.getItem(TOKEN_STORAGE_KEY) || localStorage.getItem(TOKEN_STORAGE_KEY);
-      const savedUser =
-        sessionStorage.getItem(USER_STORAGE_KEY) || localStorage.getItem(USER_STORAGE_KEY);
+      // Strictly read from sessionStorage (only alive for the current browser session/tab)
+      const savedToken = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+      const savedUser = sessionStorage.getItem(USER_STORAGE_KEY);
 
       if (savedToken) {
         await verifyToken(savedToken, savedUser ? JSON.parse(savedUser) : null);
@@ -155,18 +181,91 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const persistSession = (authToken: string, authUser: AuthUser) => {
     setUser(authUser);
     setToken(authToken);
+    // Persist only in sessionStorage (automatically terminated when tab or window closes)
     sessionStorage.setItem(TOKEN_STORAGE_KEY, authToken);
     sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(authUser));
   };
 
-  const clearTokens = () => {
+  const clearTokens = useCallback(() => {
     setUser(null);
     setToken(null);
-    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
-    sessionStorage.removeItem(USER_STORAGE_KEY);
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
-    localStorage.removeItem(USER_STORAGE_KEY);
-  };
+    try {
+      sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      sessionStorage.removeItem(USER_STORAGE_KEY);
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem(USER_STORAGE_KEY);
+    } catch {}
+  }, []);
+
+  const logoutWithReason = useCallback(
+    async (reason: string) => {
+      const activeUserId = user?.userId || 'SESSION';
+      const activeDeviceId = deviceInfo?.deviceId || 'DEVICE';
+      recordVaultSecurityEvent('AUTO_SIGN_OUT', activeUserId, activeDeviceId, reason, 'WARNING');
+
+      try {
+        if (token && !token.startsWith('vault_')) {
+          fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          }).catch(() => {});
+        }
+      } catch {}
+      clearTokens();
+      setSecurityAlert(reason);
+      try {
+        sessionStorage.setItem(SECURITY_ALERT_KEY, reason);
+      } catch {}
+    },
+    [token, user, deviceInfo, clearTokens]
+  );
+
+  // Inactivity Auto-Signout Watchdog (15 minutes idle time)
+  useEffect(() => {
+    if (!token || !user) return;
+
+    let inactivityTimer: NodeJS.Timeout;
+    const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+
+    const handleUserActivity = () => {
+      clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => {
+        logoutWithReason('Session expired due to inactivity. Signed out automatically for device protection.');
+      }, INACTIVITY_TIMEOUT_MS);
+    };
+
+    const trackedEvents = ['mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
+    trackedEvents.forEach((ev) => window.addEventListener(ev, handleUserActivity, { passive: true }));
+    handleUserActivity();
+
+    return () => {
+      clearTimeout(inactivityTimer);
+      trackedEvents.forEach((ev) => window.removeEventListener(ev, handleUserActivity));
+    };
+  }, [token, user, logoutWithReason]);
+
+  // Track failed attempts and trigger automatic security lockout after 3 consecutive failures
+  const [failedAttempts, setFailedAttempts] = useState<number>(0);
+
+  const registerFailedAttempt = useCallback(
+    (context = 'Invalid security action') => {
+      setFailedAttempts((prev) => {
+        const next = prev + 1;
+        if (next >= 3) {
+          logoutWithReason(
+            `⚠️ Security Alert: 3 invalid attempts detected (${context}). Automatically signed out and locked for hardware safety.`
+          );
+          return 0;
+        }
+        return next;
+      });
+    },
+    [logoutWithReason]
+  );
+
+  const resetFailedAttempts = useCallback(() => {
+    setFailedAttempts(0);
+  }, []);
 
   const login = async (userId: string, password: string): Promise<LoginResult> => {
     try {
@@ -422,7 +521,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithBiometric,
         requestDeviceApproval,
         checkDeviceStatus,
+        securityAlert,
+        clearSecurityAlert,
+        registerFailedAttempt,
+        resetFailedAttempts,
         logout,
+        logoutWithReason,
         refreshSession,
       }}
     >
