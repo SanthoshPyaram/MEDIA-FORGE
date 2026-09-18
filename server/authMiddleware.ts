@@ -1280,6 +1280,11 @@ export function createAuthMiddleware(rootDir: string) {
           };
         }
 
+        const passkey = (body.passkey || '').trim();
+        if (passkey !== '630211') {
+          return sendJson(403, { error: 'Invalid admin approval passkey. Required: 630211' });
+        }
+
         // Save name to user record
         if (!db.users[reqItem.userId]) {
           db.users[reqItem.userId] = { userId: reqItem.userId, registeredName: reqItem.name };
@@ -1289,17 +1294,13 @@ export function createAuthMiddleware(rootDir: string) {
 
         dbManager.save();
 
-        const bioNotice = body.biometricVerified
-          ? ' (Biometrically Verified via Fingerprint / Windows Hello)'
-          : '';
-
         dbManager.recordSecurityEvent(
           'Device approved',
           reqItem.userId,
           reqItem.name,
           reqItem.friendlyName,
           reqItem.deviceId,
-          `Administrator confirmed approval for device ${reqItem.friendlyName}${bioNotice}`
+          `Administrator confirmed approval for device ${reqItem.friendlyName} (Verified with Passkey 630211 🔑)`
         );
 
         return sendJson(200, { success: true });

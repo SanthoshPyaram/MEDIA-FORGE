@@ -25,10 +25,9 @@ import {
   Layers,
   FileText,
   HelpCircle,
-  Fingerprint,
   UserPlus,
+  Key,
 } from 'lucide-react';
-import { verifyAdminBiometric } from '@/utils/biometricAuth';
 import {
   getVaultAdminData,
   setVaultDeviceStatus,
@@ -164,7 +163,9 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
   // Feedback & Loading
   const [isLoading, setIsLoading] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
-  const [isBioApproving, setIsBioApproving] = useState(false);
+  const [approvalPasskey, setApprovalPasskey] = useState('');
+  const [passkeyError, setPasskeyError] = useState<string | null>(null);
+  const [isApproving, setIsApproving] = useState(false);
 
   // Modals State
   const [approveConfirmTarget, setApproveConfirmTarget] = useState<DeviceRequest | null>(null);
@@ -404,66 +405,60 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
   // -------------------------------------------------------------
   // Actions: Approve / Reject / Revoke / Rename
   // -------------------------------------------------------------
-  const handleConfirmApproval = async (withBiometric = false) => {
+  const handleConfirmApproval = async (enteredPasskey: string) => {
     if (!token || !approveConfirmTarget) return;
 
-    let bioVerified = false;
-    if (withBiometric) {
-      setIsBioApproving(true);
-      try {
-        const bioResult = await verifyAdminBiometric('24MIC7312');
-        setIsBioApproving(false);
-        if (!bioResult.success) {
-          setFeedbackMessage(bioResult.error || 'Biometric verification cancelled.');
-          return;
-        }
-        bioVerified = true;
-      } catch (err: any) {
-        setIsBioApproving(false);
-        setFeedbackMessage(err.message || 'Biometric verification error.');
-        return;
-      }
+    if (enteredPasskey.trim() !== '630211') {
+      setPasskeyError('Invalid passkey. Enter 630211 to approve.');
+      return;
     }
+
+    setIsApproving(true);
+    setPasskeyError(null);
 
     try {
       let serverHandled = false;
       if (!token.startsWith('vault_')) {
-        const res = await fetch('/api/admin/device-requests/approve', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            requestId: approveConfirmTarget.requestId,
-            deviceId: approveConfirmTarget.deviceId,
-            userId: approveConfirmTarget.userId,
-            biometricVerified: bioVerified,
-          }),
-        });
+        try {
+          const res = await fetch('/api/admin/device-requests/approve', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              requestId: approveConfirmTarget.requestId,
+              deviceId: approveConfirmTarget.deviceId,
+              userId: approveConfirmTarget.userId,
+              passkey: '630211',
+            }),
+          });
 
-        const isJson = res.headers.get('content-type')?.includes('application/json');
-        if (res.ok && isJson) {
-          serverHandled = true;
-        }
+          const isJson = res.headers.get('content-type')?.includes('application/json');
+          if (res.ok && isJson) {
+            serverHandled = true;
+          }
+        } catch {}
       }
 
       if (!serverHandled) {
         setVaultDeviceStatus(
           approveConfirmTarget.userId,
           approveConfirmTarget.deviceId,
-          'approved'
+          'approved',
+          '630211'
         );
       }
 
       setFeedbackMessage(
-        `✓ Approved device ${approveConfirmTarget.friendlyName} for ${approveConfirmTarget.name}${
-          bioVerified ? ' (Biometrically Verified 👆)' : ''
-        }`
+        `✓ Approved device ${approveConfirmTarget.friendlyName} for ${approveConfirmTarget.name} (Verified with Passkey 630211 🔑)`
       );
       setApproveConfirmTarget(null);
+      setApprovalPasskey('');
+      setIsApproving(false);
       refreshAll();
     } catch (e: any) {
+      setIsApproving(false);
       setFeedbackMessage(`Error: ${e.message}`);
     }
   };
@@ -1235,12 +1230,12 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="max-w-md w-full p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-5 text-center">
             <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
-              <CheckCircle2 className="w-6 h-6" />
+              <Key className="w-6 h-6" />
             </div>
 
             <div className="space-y-1">
-              <h3 className="text-lg font-bold text-white">Approve this device?</h3>
-              <p className="text-xs text-slate-400">This will grant trusted access for this hardware.</p>
+              <h3 className="text-lg font-bold text-white">Approve Device Authorization</h3>
+              <p className="text-xs text-slate-400">Enter Admin Passkey (<span className="text-emerald-400 font-mono font-semibold">630211</span>) to approve hardware access.</p>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-left space-y-2 text-xs">
@@ -1262,36 +1257,63 @@ export const AdminAuditDashboard: React.FC<AdminAuditDashboardProps> = ({ onBack
               </div>
             </div>
 
-            <div className="space-y-2 pt-2">
-              <button
-                type="button"
-                onClick={() => handleConfirmApproval(true)}
-                disabled={isBioApproving}
-                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:brightness-110 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2"
-              >
-                <Fingerprint className={`w-4 h-4 text-emerald-200 ${isBioApproving ? 'animate-pulse' : ''}`} />
-                <span>
-                  {isBioApproving ? 'Scanning Fingerprint / Windows Hello...' : '👆 Verify Fingerprint & Approve'}
-                </span>
-              </button>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleConfirmApproval(approvalPasskey);
+              }}
+              className="space-y-4 pt-1"
+            >
+              <div className="text-left space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Key className="w-3.5 h-3.5 text-emerald-400" />
+                  Admin Passkey
+                </label>
+                <input
+                  type="password"
+                  value={approvalPasskey}
+                  onChange={(e) => {
+                    setApprovalPasskey(e.target.value);
+                    setPasskeyError(null);
+                  }}
+                  placeholder="Enter Passkey (630211)"
+                  autoFocus
+                  maxLength={10}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-center tracking-widest text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+                {passkeyError && (
+                  <p className="text-rose-400 text-[11px] font-medium text-center">{passkeyError}</p>
+                )}
+              </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() => setApproveConfirmTarget(null)}
-                  className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
+                  onClick={() => {
+                    setApproveConfirmTarget(null);
+                    setApprovalPasskey('');
+                    setPasskeyError(null);
+                  }}
+                  className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
                 >
-                  CANCEL
+                  Cancel
                 </button>
                 <button
-                  type="button"
-                  onClick={() => handleConfirmApproval(false)}
-                  className="flex-1 py-2 px-3 rounded-xl bg-slate-800/80 hover:bg-emerald-950/50 hover:text-emerald-300 border border-slate-700 text-slate-300 font-semibold text-xs transition-colors"
+                  type="submit"
+                  disabled={isApproving || !approvalPasskey.trim()}
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:brightness-110 disabled:opacity-50 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-1.5"
                 >
-                  Confirm (Password)
+                  {isApproving ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Approve Device</span>
+                    </>
+                  )}
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}

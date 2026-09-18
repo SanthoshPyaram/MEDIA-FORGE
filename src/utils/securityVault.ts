@@ -446,8 +446,12 @@ export function getVaultAdminData() {
 export function setVaultDeviceStatus(
   userId: string,
   deviceId: string,
-  status: 'approved' | 'rejected' | 'revoked'
+  status: 'approved' | 'rejected' | 'revoked',
+  passkey?: string
 ) {
+  if (status === 'approved' && passkey && passkey.trim() !== '630211') {
+    throw new Error('Invalid Admin Passkey. Expected 630211.');
+  }
   const db = getLocalDB();
   const deviceKey = `${userId}_${deviceId}`;
 
@@ -463,7 +467,7 @@ export function setVaultDeviceStatus(
   });
 
   saveLocalDB(db);
-  logAuditEvent('DEVICE_STATUS_CHANGED', userId, deviceId, `Device set to ${status}`, 'SUCCESS');
+  logAuditEvent('DEVICE_STATUS_CHANGED', userId, deviceId, `Device set to ${status}${passkey ? ' (Passkey 630211 Verified)' : ''}`, 'SUCCESS');
   return { success: true, status };
 }
 
@@ -491,3 +495,4 @@ function logAuditEvent(
     saveLocalDB(db);
   } catch {}
 }
+

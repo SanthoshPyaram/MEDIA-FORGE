@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { CompatibilityBanner } from '@/components/layout/CompatibilityBanner';
@@ -30,10 +30,25 @@ import { DetectedFileInfo } from '@/types/job';
 import { AlertCircle, ChevronDown, ChevronUp, RefreshCw, ShieldAlert, Lock } from 'lucide-react';
 import { getWorkspaceTheme } from '@/lib/theme/workspaceThemes';
 
+const getInitialView = (): string => {
+  try {
+    const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+    const validViews = ['home', 'video', 'image', 'audio', 'pdf', 'document', 'privacy', 'admin'];
+    if (validViews.includes(hash)) {
+      return hash;
+    }
+    const stored = sessionStorage.getItem('mediaforge_active_view');
+    if (stored && validViews.includes(stored)) {
+      return stored;
+    }
+  } catch {}
+  return 'home';
+};
+
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading, isAdmin, user } = useAuth();
 
-  const [currentView, setCurrentView] = useState<string>('home');
+  const [currentView, setCurrentView] = useState<string>(getInitialView);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [activeFileInfo, setActiveFileInfo] = useState<DetectedFileInfo | null>(null);
   const [smartProcessTarget, setSmartProcessTarget] = useState<DetectedFileInfo | null>(null);
@@ -50,9 +65,56 @@ const AppContent: React.FC = () => {
     setIsAuthModalOpen(true);
   };
 
+  // Synchronize currentView with URL hash and sessionStorage
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('mediaforge_active_view', currentView);
+      const currentHash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+      if (currentHash !== currentView) {
+        window.location.hash = `#/${currentView}`;
+      }
+    } catch {}
+  }, [currentView]);
+
+  // Handle browser back/forward and direct hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+      const validViews = ['home', 'video', 'image', 'audio', 'pdf', 'document', 'privacy', 'admin'];
+      if (validViews.includes(hash) && hash !== currentView) {
+        if (!isAuthenticated && hash !== 'home' && hash !== 'privacy') {
+          openAuth(hash === 'admin' ? 'ADMIN' : 'USER');
+          return;
+        }
+        if (hash === 'admin' && !isAdmin) {
+          openAuth('ADMIN');
+          return;
+        }
+        setCurrentView(hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [currentView, isAuthenticated, isAdmin]);
+
+  // If user is admin and stored view is admin, keep/restore admin view
+  useEffect(() => {
+    if (isAdmin) {
+      const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+      const stored = sessionStorage.getItem('mediaforge_active_view');
+      if (hash === 'admin' || stored === 'admin') {
+        setCurrentView('admin');
+      }
+    }
+  }, [isAdmin]);
+
   const handleNavigate = (view: string) => {
     if (!isAuthenticated && view !== 'home' && view !== 'privacy') {
       openAuth(view === 'admin' ? 'ADMIN' : 'USER');
+      return;
+    }
+    if (view === 'admin' && !isAdmin) {
+      openAuth('ADMIN');
       return;
     }
     setCurrentView(view);
@@ -486,7 +548,12 @@ const AppContent: React.FC = () => {
             <SecurityGateway
               initialPortal={authPortalMode}
               onClose={() => setIsAuthModalOpen(false)}
-              onSuccess={() => setIsAuthModalOpen(false)}
+              onSuccess={() => {
+                setIsAuthModalOpen(false);
+                if (authPortalMode === 'ADMIN') {
+                  setCurrentView('admin');
+                }
+              }}
             />
           </div>
         )}

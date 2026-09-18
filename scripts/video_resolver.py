@@ -168,8 +168,8 @@ def apply_video_edits(source_file, dest_file, crop, mute_audio, custom_audio, wa
     if vf_filters:
         cmd.extend(['-vf', ','.join(vf_filters)])
 
-    # Video codec: ultrafast H.264
-    cmd.extend(['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '22', '-pix_fmt', 'yuv420p'])
+    # Video codec: ultrafast H.264 with multi-threading
+    cmd.extend(['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '22', '-pix_fmt', 'yuv420p', '-threads', '0'])
 
     # Audio handling
     if mute_audio:
@@ -244,7 +244,12 @@ def download_video(url, quality, output_path, trim_start=None, trim_end=None, li
         target_h = QUALITY_HEIGHT_MAP.get(quality, 720)
         format_spec = f"bestvideo[height<={target_h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={target_h}]+bestaudio/best[height<={target_h}]/best"
         cmd.extend([
-            '--concurrent-fragments', '4',
+            '--concurrent-fragments', '16',
+            '--buffer-size', '16M',
+            '--http-chunk-size', '10M',
+            '--socket-timeout', '30',
+            '--retries', '5',
+            '--file-access-retries', '5',
             '-f', format_spec,
             '--merge-output-format', 'mp4',
             '-o', raw_output,
