@@ -112,8 +112,8 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
   const [trimStartStr, setTrimStartStr] = useState<string>('00:00');
   const [trimEndStr, setTrimEndStr] = useState<string>('01:00');
   const [limit1Min, setLimit1Min] = useState<boolean>(true);
-  const [cropRatio, setCropRatio] = useState<'original' | '9:16' | '16:9' | '1:1' | 'fit'>('9:16');
-  const [selectedTrimQuality, setSelectedTrimQuality] = useState<'1080p' | '720p' | '480p' | '360p' | 'audio'>('720p');
+  const [cropRatio, setCropRatio] = useState<'original' | '9:16' | '16:9' | '1:1' | 'fit'>('original');
+  const [selectedTrimQuality, setSelectedTrimQuality] = useState<'original' | '1080p' | '720p' | '480p' | '360p' | 'audio'>('original');
   const [isMuteAudio, setIsMuteAudio] = useState<boolean>(false);
   const [customAudioFile, setCustomAudioFile] = useState<File | null>(null);
   const [isWatermarkEnabled, setIsWatermarkEnabled] = useState<boolean>(false);
@@ -537,6 +537,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
           thumbnail,
           isVertical: isShort,
           qualities: [
+            { id: 'original', label: 'Source (Instant Export)', height: 0, ext: 'mp4', type: 'video' },
             { id: '1080p', label: '1080p Full HD', height: 1080, ext: 'mp4', type: 'video' },
             { id: '720p', label: '720p HD', height: 720, ext: 'mp4', type: 'video' },
             { id: '480p', label: '480p SD', height: 480, ext: 'mp4', type: 'video' },
@@ -664,7 +665,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
           sourceFile,
           {
             outputFormat: 'mp4',
-            resolution: quality.id === '1080p' || quality.id === '720p' || quality.id === '480p' || quality.id === '360p' ? quality.id : '720p',
+            resolution: quality.id === '1080p' || quality.id === '720p' || quality.id === '480p' || quality.id === '360p' ? quality.id : 'original',
           },
           (p, stage) => setBatchProgressText(`${stage} (${p}%)`)
         );
@@ -838,7 +839,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
           outputFormat: 'mp4',
           resolution: selectedTrimQuality === '1080p' || selectedTrimQuality === '720p' || selectedTrimQuality === '480p' || selectedTrimQuality === '360p'
             ? selectedTrimQuality
-            : '720p',
+            : 'original',
           trim: { start: startSec, end: endSec },
           muteAudio: isMuteAudio,
           customAudio: customAudioFile ? {
@@ -905,7 +906,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
         sourceFile,
         {
           outputFormat: 'mp4',
-          resolution: '720p',
+          resolution: 'original',
           trim: { start: startSec, end: endSec },
           muteAudio: isMuteAudio,
         },
@@ -1467,8 +1468,9 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
                             </span>
                           </div>
 
-                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                          <div className="grid grid-cols-2 sm:grid-cols-6 gap-1.5">
                             {[
+                              { id: 'original', label: 'Source (Instant)' },
                               { id: '1080p', label: '1080p Full HD' },
                               { id: '720p', label: '720p HD' },
                               { id: '480p', label: '480p SD' },

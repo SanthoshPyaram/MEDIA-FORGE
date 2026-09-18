@@ -30,7 +30,53 @@ export async function processAudio(
 
   onProgress?.(25, 'Configuring audio filters...');
 
-  const args: string[] = [];
+  // ⚡ Stream copy fast path if trimming matching audio format without normalization
+  if (!options.normalize && inputExt === outExt) {
+    try {
+      onProgress?.(30, 'Trimming audio instantly...');
+      const fastArgs: string[] = [];
+      if (options.trim && options.trim.start > 0) {
+        fastArgs.push('-ss', options.trim.start.toFixed(2));
+      }
+      fastArgs.push('-i', inputName);
+      if (options.trim && options.trim.end > options.trim.start) {
+        const duration = options.trim.end - options.trim.start;
+        fastArgs.push('-t', duration.toFixed(2));
+      }
+      fastArgs.push('-c', 'copy', '-avoid_negative_ts', 'make_zero', outputName);
+      await ffmpeg.exec(fastArgs);
+
+      const outputData = (await ffmpeg.readFile(outputName)) as Uint8Array;
+      if (outputData && outputData.length > 0) {
+        const mimeMap: Record<string, string> = {
+          mp3: 'audio/mpeg',
+          wav: 'audio/wav',
+          ogg: 'audio/ogg',
+          aac: 'audio/aac',
+          m4a: 'audio/mp4',
+        };
+        const blob = new Blob([outputData.buffer as ArrayBuffer], { type: mimeMap[outExt] || 'audio/mpeg' });
+        try {
+          await ffmpeg.deleteFile(inputName);
+          await ffmpeg.deleteFile(outputName);
+        } catch (e) {}
+        onProgress?.(100, 'Complete');
+        const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+        return {
+          blob,
+          outputName: `${baseName}_mediaforge.${outExt}`,
+          size: blob.size,
+        };
+      }
+    } catch (copyErr) {
+      console.warn('Audio stream copy skipped, transcoding:', copyErr);
+      try {
+        await ffmpeg.deleteFile(outputName);
+      } catch (e) {}
+    }
+  }
+
+  const args: string[] = ['-threads', '0'];
 
   if (options.trim && options.trim.start > 0) {
     args.push('-ss', options.trim.start.toFixed(2));
@@ -48,7 +94,7 @@ export async function processAudio(
     args.push('-filter:a', 'loudnorm=I=-16:LRA=11:TP=-1.5');
   }
 
-  // Audio Codec & Bitrate
+  // Audio Codec & Bitrate (Fast encoding)
   if (outExt === 'mp3') {
     args.push('-c:a', 'libmp3lame', '-b:a', options.bitrate || '192k');
   } else if (outExt === 'wav') {

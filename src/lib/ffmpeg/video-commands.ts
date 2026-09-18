@@ -210,7 +210,97 @@ export async function processVideo(
 
   onProgress?.(26, 'Configuring filters and encoders...');
 
-  const args: string[] = [];
+  // ⚡ Check if pure stream copy (instant sub-second remuxing) can be performed
+  const isVideoFilterless =
+    !watermarkFileName &&
+    !customAudioFileName &&
+    !options.rotate &&
+    !options.flipH &&
+    !options.flipV &&
+    (!options.crop || options.crop.width <= 0 || options.crop.height <= 0) &&
+    (!options.watermarkModify || options.watermarkModify.width <= 0) &&
+    (!options.delogo || !options.delogo.enabled) &&
+    (!options.filter || options.filter === 'original') &&
+    !options.smartEnhance &&
+    !options.sharpen &&
+    !options.denoise &&
+    !options.brightness &&
+    !options.contrast &&
+    !options.saturation &&
+    (options.gamma === undefined || options.gamma === 1.0) &&
+    (options.speed === undefined || options.speed === 1.0) &&
+    (!options.resolution || options.resolution === 'original') &&
+    !options.fps &&
+    !options.bitrate &&
+    !options.compressionPreset;
+
+  const isAudioFilterless =
+    !options.normalizeAudio &&
+    (!options.speed || options.speed === 1.0) &&
+    (!options.audioFade?.in || options.audioFade.in <= 0) &&
+    (!options.audioFade?.out || options.audioFade.out <= 0);
+
+  const isDirectContainerMatch =
+    inputExt === outExt || (outExt === 'mp4' && ['mp4', 'm4v', 'mov'].includes(inputExt));
+
+  if (isVideoFilterless && isDirectContainerMatch) {
+    try {
+      onProgress?.(30, 'Exporting instantly via stream copy...');
+      const fastArgs: string[] = [];
+
+      if (options.trim && options.trim.start > 0) {
+        fastArgs.push('-ss', options.trim.start.toFixed(2));
+      }
+      fastArgs.push('-i', inputName);
+
+      if (options.trim && options.trim.end > options.trim.start) {
+        const duration = options.trim.end - options.trim.start;
+        fastArgs.push('-t', duration.toFixed(2));
+      }
+
+      if (options.muteAudio) {
+        fastArgs.push('-c:v', 'copy', '-an');
+      } else if (isAudioFilterless) {
+        fastArgs.push('-c', 'copy');
+      } else {
+        fastArgs.push('-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k');
+      }
+
+      fastArgs.push('-avoid_negative_ts', 'make_zero');
+      if (outExt === 'mp4' || outExt === 'mov') {
+        fastArgs.push('-movflags', '+faststart');
+      }
+      fastArgs.push(outputName);
+
+      await ffmpeg.exec(fastArgs);
+      const outputData = (await ffmpeg.readFile(outputName)) as Uint8Array;
+      if (outputData && outputData.length > 0) {
+        const mimeType = outExt === 'mp4' ? 'video/mp4' : outExt === 'webm' ? 'video/webm' : 'video/quicktime';
+        const blob = new Blob([outputData.buffer as ArrayBuffer], { type: mimeType });
+
+        try {
+          await ffmpeg.deleteFile(inputName);
+          await ffmpeg.deleteFile(outputName);
+        } catch (e) {}
+
+        onProgress?.(100, 'Complete');
+        const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+        return {
+          blob,
+          outputName: `${baseName}_mediaforge.${outExt}`,
+          size: blob.size,
+        };
+      }
+    } catch (streamCopyErr) {
+      console.warn('Fast stream copy failed or unsupported, falling back to ultrafast transcoding:', streamCopyErr);
+      try {
+        await ffmpeg.deleteFile(outputName);
+      } catch (e) {}
+    }
+  }
+
+  // Full Transcoding Pass (Ultrafast preset, multithreaded, fast bilinear scaling)
+  const args: string[] = ['-sws_flags', 'fast_bilinear'];
 
   // Trim start
   if (options.trim && options.trim.start > 0) {
@@ -280,11 +370,9 @@ export async function processVideo(
       const color = mod.color || '#000000';
       vf.push(`drawbox=x=${mx}:y=${my}:w=${mw}:h=${mh}:color=${color}@1:t=fill`);
     } else if (mod.mode === 'blur' || mod.mode === 'pixelate') {
-      // High-quality delogo inpainting is the standard safe local implementation
       vf.push(`delogo=x=${mx}:y=${my}:w=${mw}:h=${mh}`);
     }
   } else if (options.delogo && options.delogo.enabled) {
-    // Backwards-compatibility
     const dx = Math.max(0, Math.round(options.delogo.x));
     const dy = Math.max(0, Math.round(options.delogo.y));
     const dw = Math.max(4, Math.round(options.delogo.width));
@@ -349,26 +437,26 @@ export async function processVideo(
     vf.push(`setpts=${ptsMultiplier}*PTS`);
   }
 
-  // 9. Resolution
+  // 9. Resolution (fast bilinear scaling)
   if (options.resolution && options.resolution !== 'original') {
     switch (options.resolution) {
       case '360p':
-        vf.push('scale=-2:360');
+        vf.push('scale=-2:360:flags=fast_bilinear');
         break;
       case '480p':
-        vf.push('scale=-2:480');
+        vf.push('scale=-2:480:flags=fast_bilinear');
         break;
       case '720p':
-        vf.push('scale=-2:720');
+        vf.push('scale=-2:720:flags=fast_bilinear');
         break;
       case '1080p':
-        vf.push('scale=-2:1080');
+        vf.push('scale=-2:1080:flags=fast_bilinear');
         break;
       case '1440p':
-        vf.push('scale=-2:1440');
+        vf.push('scale=-2:1440:flags=fast_bilinear');
         break;
       case '4k':
-        vf.push('scale=-2:2160');
+        vf.push('scale=-2:2160:flags=fast_bilinear');
         break;
     }
   }
@@ -460,7 +548,6 @@ export async function processVideo(
       );
       audioMap = '[outa]';
     } else {
-      // Replace mode: map the custom audio track directly
       audioMap = `${customAudioInputIdx}:a`;
     }
     args.push('-shortest');
@@ -492,9 +579,16 @@ export async function processVideo(
     }
   }
 
-  // Video Codec & Quality settings
+  // Video Codec & Quality settings (Ultrafast preset, fastdecode tune, multithreading)
   if (outExt === 'mp4') {
-    args.push('-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p');
+    args.push(
+      '-c:v', 'libx264',
+      '-preset', 'ultrafast',
+      '-tune', 'fastdecode',
+      '-pix_fmt', 'yuv420p',
+      '-threads', '0',
+      '-movflags', '+faststart'
+    );
     if (options.bitrate) {
       args.push('-b:v', options.bitrate);
     } else if (options.compressionPreset) {
@@ -511,7 +605,13 @@ export async function processVideo(
       args.push('-crf', crf);
     }
   } else if (outExt === 'webm') {
-    args.push('-c:v', 'libvpx-vp9');
+    args.push(
+      '-c:v', 'libvpx-vp9',
+      '-deadline', 'realtime',
+      '-cpu-used', '8',
+      '-row-mt', '1',
+      '-threads', '0'
+    );
     if (options.bitrate) {
       args.push('-b:v', options.bitrate);
     } else if (options.compressionPreset) {
@@ -528,7 +628,14 @@ export async function processVideo(
       args.push('-crf', crf, '-b:v', '0');
     }
   } else if (outExt === 'mov') {
-    args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p');
+    args.push(
+      '-c:v', 'libx264',
+      '-preset', 'ultrafast',
+      '-tune', 'fastdecode',
+      '-pix_fmt', 'yuv420p',
+      '-threads', '0',
+      '-movflags', '+faststart'
+    );
   }
 
   args.push(outputName);
