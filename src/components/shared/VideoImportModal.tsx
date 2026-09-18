@@ -36,6 +36,8 @@ import {
 } from 'lucide-react';
 import { DetectedFileInfo } from '@/types/job';
 import { findProviderForUrl, ProviderStatus, VideoSourceMetadata } from '@/lib/providers';
+import { processVideo } from '@/lib/ffmpeg/video-commands';
+import { processAudio } from '@/lib/audio/audio-processor';
 
 export type ImportTab = 'upload' | 'url' | 'my-content';
 
@@ -139,8 +141,11 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
   const [lastAttemptedAction, setLastAttemptedAction] = useState<(() => Promise<void>) | null>(null);
   const [savedSessionNotice, setSavedSessionNotice] = useState(false);
 
-  // Upload Tab File Input
+  // Upload & Local Trimmer File Inputs & Local Media State
+  const [loadedLocalFile, setLoadedLocalFile] = useState<File | null>(null);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const trimmerFileInputRef = useRef<HTMLInputElement>(null);
   const myContentInputRef = useRef<HTMLInputElement>(null);
   const customAudioInputRef = useRef<HTMLInputElement>(null);
 
@@ -359,6 +364,56 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     }
   };
 
+  const handleSelectLocalFileForTrimming = (file: File) => {
+    setLoadedLocalFile(file);
+    if (localPreviewUrl) {
+      URL.revokeObjectURL(localPreviewUrl);
+    }
+    const url = URL.createObjectURL(file);
+    setLocalPreviewUrl(url);
+    setPlayerMode('native');
+
+    // Probe video metadata
+    const tempVideo = document.createElement('video');
+    tempVideo.preload = 'metadata';
+    tempVideo.src = url;
+    tempVideo.onloadedmetadata = () => {
+      const dur = Math.round(tempVideo.duration) || 60;
+      setVideoInfo({
+        success: true,
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        author: 'Local Video File',
+        duration: dur,
+        thumbnail: '',
+        isVertical: false,
+        qualities: [
+          { id: '1080p', label: '1080p Full HD', height: 1080, ext: 'mp4', type: 'video' },
+          { id: '720p', label: '720p HD', height: 720, ext: 'mp4', type: 'video' },
+          { id: '480p', label: '480p SD', height: 480, ext: 'mp4', type: 'video' },
+          { id: '360p', label: '360p Fast', height: 360, ext: 'mp4', type: 'video' },
+          { id: 'audio', label: 'MP3 High Quality Audio', height: 0, ext: 'mp3', type: 'audio' },
+        ],
+      });
+      setTrimStartStr('00:00');
+      setTrimEndStr(formatSecondsToMMSS(Math.min(dur, 60)));
+    };
+  };
+
+  const handleTrimmerFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleSelectLocalFileForTrimming(file);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (localPreviewUrl) {
+        URL.revokeObjectURL(localPreviewUrl);
+      }
+    };
+  }, [localPreviewUrl]);
+
   const formatDuration = (seconds: number) => {
     if (!seconds || isNaN(seconds)) return '';
     const m = Math.floor(seconds / 60);
@@ -521,7 +576,7 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     }
   };
 
-  // Download a single quality (without edits)
+  // Download a single quality (without edits) directly in-browser
   const handleDownloadQuality = async (quality: QualityOption) => {
     if (downloadingQuality || isDownloadingAll || isProcessingEdit) return;
     requestWakeLock();
@@ -530,19 +585,20 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setDownloadingQuality(quality.id);
     setUrlError(null);
 
-    const cleanTitle = (videoInfo?.title || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
+    const cleanTitle = (videoInfo?.title || loadedLocalFile?.name || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
     const ext = quality.type === 'audio' ? 'mp3' : 'mp4';
     const filename = `${cleanTitle}_${quality.id}.${ext}`;
 
     try {
+      let sourceFile: File | null = loadedLocalFile;
+
       const isStaticHosting = typeof window !== 'undefined' && (
         window.location.hostname.includes('github.io') ||
         window.location.protocol === 'file:' ||
         !window.location.port
       );
 
-      let blob: Blob | null = null;
-      if (!isStaticHosting) {
+      if (!sourceFile && !isStaticHosting && inputUrl.trim()) {
         try {
           const res = await fetch('/api/download-video', {
             method: 'POST',
@@ -553,45 +609,55 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
           if (res.ok) {
             const contentType = res.headers.get('content-type') || '';
             if (!contentType.includes('text/html')) {
-              blob = await res.blob();
+              const blob = await res.blob();
+              triggerBrowserDownload(blob, filename);
+              setDownloadedQualities((prev) => ({ ...prev, [quality.id]: true }));
+              setBatchProgressText(`✓ Saved ${filename} to Downloads folder!`);
+              setTimeout(() => setBatchProgressText(null), 4000);
+              return;
             }
           }
         } catch {}
       }
 
       // If direct media URL, fetch directly in browser
-      if (!blob && isDirectVideo(inputUrl.trim())) {
+      if (!sourceFile && inputUrl.trim() && isDirectVideo(inputUrl.trim())) {
         try {
           const directRes = await fetch(inputUrl.trim());
           if (directRes.ok) {
-            blob = await directRes.blob();
+            const blob = await directRes.blob();
+            sourceFile = new File([blob], `${cleanTitle}.mp4`, { type: blob.type || 'video/mp4' });
           }
         } catch {}
       }
 
-      if (blob) {
-        triggerBrowserDownload(blob, filename);
+      if (sourceFile) {
+        if (quality.type === 'audio') {
+          const res = await processAudio(
+            sourceFile,
+            { outputFormat: 'mp3', bitrate: '320k' },
+            (p, stage) => setBatchProgressText(`${stage} (${p}%)`)
+          );
+          triggerBrowserDownload(res.blob, filename);
+        } else {
+          const res = await processVideo(
+            sourceFile,
+            {
+              outputFormat: 'mp4',
+              resolution: quality.id === '1080p' || quality.id === '720p' || quality.id === '480p' || quality.id === '360p' ? quality.id : '720p',
+            },
+            (p, stage) => setBatchProgressText(`${stage} (${p}%)`)
+          );
+          triggerBrowserDownload(res.blob, filename);
+        }
         setDownloadedQualities((prev) => ({ ...prev, [quality.id]: true }));
         setBatchProgressText(`✓ Saved ${filename} to Downloads folder!`);
         setTimeout(() => setBatchProgressText(null), 4000);
         return;
       }
 
-      // Platform video (YouTube, Shorts) direct download trigger
-      const ytId = getYouTubeVideoId(inputUrl.trim());
-      const helperUrl = `https://cobalt.tools/`;
-
-      const a = document.createElement('a');
-      a.href = helperUrl;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-      setDownloadedQualities((prev) => ({ ...prev, [quality.id]: true }));
-      setBatchProgressText(`✓ Download started for ${quality.label}!`);
-      setTimeout(() => setBatchProgressText(null), 5000);
+      setBatchProgressText('Select or drop your video file to process and download directly!');
+      trimmerFileInputRef.current?.click();
     } catch (err: any) {
       setUrlError(`Unable to complete download for ${quality.label}`);
     } finally {
@@ -606,63 +672,50 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setDownloadingQuality(quality.id);
     setUrlError(null);
 
-    const cleanTitle = (videoInfo?.title || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
+    const cleanTitle = (videoInfo?.title || loadedLocalFile?.name || 'video').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'video';
     const filename = `${cleanTitle}_${quality.id}.mp4`;
 
     try {
+      if (loadedLocalFile) {
+        handleProcessLocalFile(loadedLocalFile);
+        return;
+      }
+
+      if (inputUrl.trim() && isDirectVideo(inputUrl.trim())) {
+        const directRes = await fetch(inputUrl.trim());
+        if (directRes.ok) {
+          const blob = await directRes.blob();
+          const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
+          handleProcessLocalFile(file);
+          return;
+        }
+      }
+
       const isStaticHosting = typeof window !== 'undefined' && (
         window.location.hostname.includes('github.io') ||
         window.location.protocol === 'file:' ||
         !window.location.port
       );
 
-      let blob: Blob | null = null;
-      if (!isStaticHosting) {
-        try {
-          const res = await fetch('/api/download-video', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: inputUrl.trim(), quality: quality.id }),
-          });
+      if (!isStaticHosting && inputUrl.trim()) {
+        const res = await fetch('/api/download-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: inputUrl.trim(), quality: quality.id }),
+        });
 
-          if (res.ok) {
-            const contentType = res.headers.get('content-type') || '';
-            if (!contentType.includes('text/html')) {
-              blob = await res.blob();
-            }
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (!contentType.includes('text/html')) {
+            const blob = await res.blob();
+            const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
+            handleProcessLocalFile(file);
+            return;
           }
-        } catch {}
+        }
       }
 
-      if (!blob && isDirectVideo(inputUrl.trim())) {
-        try {
-          const directRes = await fetch(inputUrl.trim());
-          if (directRes.ok) {
-            blob = await directRes.blob();
-          }
-        } catch {}
-      }
-
-      if (blob) {
-        const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
-        handleProcessLocalFile(file);
-        return;
-      }
-
-      // Static GitHub Pages fallback
-      const ytId = getYouTubeVideoId(inputUrl.trim());
-      const helperUrl = `https://cobalt.tools/`;
-
-      const a = document.createElement('a');
-      a.href = helperUrl;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-      setBatchProgressText('Opened video download helper. Save the file and drop into Studio for instant editing!');
-      setTimeout(() => setBatchProgressText(null), 6000);
+      trimmerFileInputRef.current?.click();
     } catch (err: any) {
       setUrlError(`Failed to load ${quality.label} into studio`);
     } finally {
@@ -679,19 +732,18 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setIsDownloadingAll(true);
     setUrlError(null);
 
-    const helperUrl = `https://cobalt.tools/`;
-
-    const a = document.createElement('a');
-    a.href = helperUrl;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    setIsDownloadingAll(false);
-    setBatchProgressText('All quality download links opened!');
-    setTimeout(() => setBatchProgressText(null), 5000);
+    try {
+      for (const q of videoInfo.qualities) {
+        setBatchProgressText(`Downloading ${q.label}...`);
+        await handleDownloadQuality(q);
+      }
+      setBatchProgressText('✓ All qualities processed directly to your Downloads folder!');
+      setTimeout(() => setBatchProgressText(null), 5000);
+    } catch (err: any) {
+      setUrlError('Download batch interrupted.');
+    } finally {
+      setIsDownloadingAll(false);
+    }
   };
 
   // Helper to construct editing payload
@@ -733,30 +785,33 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     return payload;
   };
 
-  // ⚡ Download Edited Clip in Selected Quality
+  // ⚡ Download Edited Clip in Selected Quality (Direct in-browser download)
   const handleDownloadEditedClip = async () => {
     if (isProcessingEdit || downloadingQuality || isDownloadingAll) return;
     requestWakeLock();
     setLastAttemptedAction(() => () => handleDownloadEditedClip());
     setIsInterrupted(false);
     setIsProcessingEdit(true);
-    setEditProgressText(`Rendering ${selectedTrimQuality.toUpperCase()} clip (${trimStartStr} to ${trimEndStr})...`);
     setUrlError(null);
 
-    const cleanTitle = (videoInfo?.title || 'clip').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'clip';
-    const cropSuffix = cropRatio !== 'original' ? `_${cropRatio.replace(':', 'x')}` : '';
-    const ext = selectedTrimQuality === 'audio' ? 'mp3' : 'mp4';
-    const filename = `${cleanTitle}${cropSuffix}_${selectedTrimQuality}_trimmed.${ext}`;
+    const cleanTitle = (videoInfo?.title || loadedLocalFile?.name || 'clip').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'clip';
+    const isAudioOnly = selectedTrimQuality === 'audio';
+    const ext = isAudioOnly ? 'mp3' : 'mp4';
+    const filename = `${cleanTitle}_${selectedTrimQuality}_trimmed.${ext}`;
+
+    setEditProgressText(`Preparing ${selectedTrimQuality.toUpperCase()} clip (${trimStartStr} to ${trimEndStr})...`);
 
     try {
+      let sourceFile: File | null = loadedLocalFile;
+
       const isStaticHosting = typeof window !== 'undefined' && (
         window.location.hostname.includes('github.io') ||
         window.location.protocol === 'file:' ||
         !window.location.port
       );
 
-      let blob: Blob | null = null;
-      if (!isStaticHosting) {
+      // 1. If backend API is available (non-static)
+      if (!sourceFile && !isStaticHosting && inputUrl.trim()) {
         try {
           const payload = await buildEditPayload(selectedTrimQuality);
           const res = await fetch('/api/download-video', {
@@ -768,35 +823,94 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
           if (res.ok) {
             const contentType = res.headers.get('content-type') || '';
             if (!contentType.includes('text/html')) {
-              blob = await res.blob();
+              const blob = await res.blob();
+              triggerBrowserDownload(blob, filename);
+              setEditProgressText(`✓ Saved ${filename} to Downloads folder!`);
+              setTimeout(() => setEditProgressText(null), 4000);
+              return;
             }
           }
         } catch {}
       }
 
-      if (blob) {
-        triggerBrowserDownload(blob, filename);
-        setEditProgressText(`✓ Saved ${filename} to Downloads folder!`);
-        setTimeout(() => setEditProgressText(null), 4000);
+      // 2. Direct media URL fetch in browser
+      if (!sourceFile && inputUrl.trim() && isDirectVideo(inputUrl.trim())) {
+        try {
+          setEditProgressText('Fetching video stream in browser...');
+          const directRes = await fetch(inputUrl.trim());
+          if (directRes.ok) {
+            const blob = await directRes.blob();
+            sourceFile = new File([blob], `${cleanTitle}.mp4`, { type: blob.type || 'video/mp4' });
+          }
+        } catch (e) {
+          console.warn('Direct media fetch failed:', e);
+        }
+      }
+
+      // 3. Process with In-Browser WebAssembly Engine
+      if (sourceFile) {
+        const startSec = parseTimeToSeconds(trimStartStr);
+        let endSec = parseTimeToSeconds(trimEndStr);
+        if (endSec <= startSec) endSec = startSec + 60;
+        if (limit1Min && endSec - startSec > 60) {
+          endSec = startSec + 60;
+        }
+
+        if (isAudioOnly) {
+          setEditProgressText('Extracting and trimming audio track in-browser...');
+          const audioResult = await processAudio(
+            sourceFile,
+            {
+              outputFormat: 'mp3',
+              bitrate: '320k',
+              trim: { start: startSec, end: endSec },
+            },
+            (p, stage) => setEditProgressText(`${stage} (${p}%)`)
+          );
+          triggerBrowserDownload(audioResult.blob, filename);
+          setEditProgressText(`✓ Saved ${filename} to your Downloads folder!`);
+          setTimeout(() => setEditProgressText(null), 4000);
+          return;
+        }
+
+        setEditProgressText('Loading video engine & trimming clip in-browser...');
+        const result = await processVideo(
+          sourceFile,
+          {
+            outputFormat: 'mp4',
+            resolution: selectedTrimQuality === '1080p' || selectedTrimQuality === '720p' || selectedTrimQuality === '480p' || selectedTrimQuality === '360p'
+              ? selectedTrimQuality
+              : '720p',
+            trim: { start: startSec, end: endSec },
+            muteAudio: isMuteAudio,
+            customAudio: customAudioFile ? {
+              enabled: true,
+              file: customAudioFile,
+              mode: 'replace',
+            } : undefined,
+            watermark: isWatermarkEnabled && watermarkText.trim() ? {
+              enabled: true,
+              type: 'text',
+              text: watermarkText.trim(),
+              position: watermarkPos,
+              opacity: 0.85,
+            } : undefined,
+          },
+          (p, stage) => setEditProgressText(`${stage} (${p}%)`)
+        );
+
+        triggerBrowserDownload(result.blob, filename);
+        setEditProgressText(`✓ Successfully saved ${filename} to your Downloads folder!`);
+        setTimeout(() => setEditProgressText(null), 5000);
         return;
       }
 
-      // Static hosting fallback
-      const ytId = getYouTubeVideoId(inputUrl.trim());
-      const helperUrl = `https://cobalt.tools/`;
-
-      const a = document.createElement('a');
-      a.href = helperUrl;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-      setEditProgressText(`✓ Trim timestamps (${trimStartStr} to ${trimEndStr}) & settings saved! Download started.`);
-      setTimeout(() => setEditProgressText(null), 5000);
+      // If no file loaded yet, prompt user to select video file for in-browser trimming
+      setEditProgressText('Select or drop your video file to trim and download directly in-browser!');
+      trimmerFileInputRef.current?.click();
     } catch (err: any) {
-      setUrlError('Failed to process download.');
+      console.error('Trimming failed:', err);
+      setUrlError(err.message || 'Failed to process trimmed video in browser.');
       setEditProgressText(null);
     } finally {
       setIsProcessingEdit(false);
@@ -811,18 +925,19 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
     setEditProgressText('Preparing customized clip for MediaForge Studio...');
     setUrlError(null);
 
-    const cleanTitle = (videoInfo?.title || 'clip').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'clip';
+    const cleanTitle = (videoInfo?.title || loadedLocalFile?.name || 'clip').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'clip';
     const filename = `${cleanTitle}_edited.mp4`;
 
     try {
+      let sourceFile: File | null = loadedLocalFile;
+
       const isStaticHosting = typeof window !== 'undefined' && (
         window.location.hostname.includes('github.io') ||
         window.location.protocol === 'file:' ||
         !window.location.port
       );
 
-      let blob: Blob | null = null;
-      if (!isStaticHosting) {
+      if (!sourceFile && !isStaticHosting && inputUrl.trim()) {
         try {
           const payload = await buildEditPayload('720p');
           const res = await fetch('/api/download-video', {
@@ -834,31 +949,50 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
           if (res.ok) {
             const contentType = res.headers.get('content-type') || '';
             if (!contentType.includes('text/html')) {
-              blob = await res.blob();
+              const blob = await res.blob();
+              const file = new File([blob], filename, { type: 'video/mp4' });
+              handleProcessLocalFile(file);
+              return;
             }
           }
         } catch {}
       }
 
-      if (blob) {
-        const file = new File([blob], filename, { type: 'video/mp4' });
+      if (!sourceFile && inputUrl.trim() && isDirectVideo(inputUrl.trim())) {
+        try {
+          const directRes = await fetch(inputUrl.trim());
+          if (directRes.ok) {
+            const blob = await directRes.blob();
+            sourceFile = new File([blob], `${cleanTitle}.mp4`, { type: blob.type || 'video/mp4' });
+          }
+        } catch {}
+      }
+
+      if (sourceFile) {
+        const startSec = parseTimeToSeconds(trimStartStr);
+        let endSec = parseTimeToSeconds(trimEndStr);
+        if (endSec <= startSec) endSec = startSec + 60;
+        if (limit1Min && endSec - startSec > 60) {
+          endSec = startSec + 60;
+        }
+
+        const res = await processVideo(
+          sourceFile,
+          {
+            outputFormat: 'mp4',
+            resolution: '720p',
+            trim: { start: startSec, end: endSec },
+            muteAudio: isMuteAudio,
+          },
+          (p, stage) => setEditProgressText(`${stage} (${p}%)`)
+        );
+
+        const file = new File([res.blob], filename, { type: 'video/mp4' });
         handleProcessLocalFile(file);
         return;
       }
 
-      const ytId = getYouTubeVideoId(inputUrl.trim());
-      const helperUrl = `https://cobalt.tools/`;
-
-      const a = document.createElement('a');
-      a.href = helperUrl;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-      setBatchProgressText('Opened video download helper. Save the file and drop into Studio for instant editing!');
-      setTimeout(() => setBatchProgressText(null), 6000);
+      trimmerFileInputRef.current?.click();
     } catch (err: any) {
       setUrlError(err.message || 'Failed to load edited clip into Studio');
     } finally {
@@ -882,6 +1016,13 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
           ref={fileInputRef}
           accept={SUPPORTED_EXTENSIONS.join(',')}
           onChange={handleFileInputChange}
+          className="hidden"
+        />
+        <input
+          type="file"
+          ref={trimmerFileInputRef}
+          accept={SUPPORTED_EXTENSIONS.join(',')}
+          onChange={handleTrimmerFileInputChange}
           className="hidden"
         />
         <input
@@ -1258,12 +1399,28 @@ export const VideoImportModal: React.FC<VideoImportModalProps> = ({
 
                     {showQuickEdit && (
                       <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-4 animate-fade-in text-xs">
-                        {/* AI Analysis Diagnostic Badge */}
-                        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/80 text-indigo-950 dark:text-indigo-200">
-                          <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
-                          <span className="text-[11px] font-semibold">
-                            ⚡ AI Stream Analyzer: Fast slice downloading active • {limit1Min ? '1-Min Cap Active (Saves 92% storage & time)' : 'Full length'} • Render target: {selectedTrimQuality.toUpperCase()}.
-                          </span>
+                        {/* AI Analysis Diagnostic Badge & Local Video Picker */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/80 text-indigo-950 dark:text-indigo-200">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
+                            <span className="text-[11px] font-semibold">
+                              {loadedLocalFile ? (
+                                <span className="text-emerald-700 dark:text-emerald-300 font-bold">
+                                  ✓ Video loaded: {loadedLocalFile.name} (100% In-Browser Local Processing)
+                                </span>
+                              ) : (
+                                <>⚡ AI Trimmer: {limit1Min ? '1-Min Limit Active' : 'Full length'} • Output: {selectedTrimQuality.toUpperCase()} • Direct Download</>
+                              )}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => trimmerFileInputRef.current?.click()}
+                            className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0 shadow-xs"
+                          >
+                            <Upload className="w-3 h-3" />
+                            <span>{loadedLocalFile ? 'Change Video' : 'Load Video File to Trim'}</span>
+                          </button>
                         </div>
 
                         {/* 1. Trim & 1-Minute Limit with Video Playhead Help */}
