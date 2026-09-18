@@ -35,7 +35,8 @@ export async function getFFmpeg(
       let wasmURL = '';
 
       try {
-        const localBase = `${window.location.origin}/ffmpeg`;
+        const pathPrefix = window.location.pathname.replace(/\/[^/]*$/, '').replace(/\/+$/, '');
+        const localBase = `${window.location.origin}${pathPrefix}/ffmpeg`;
         coreURL = await toBlobURL(`${localBase}/ffmpeg-core.js`, 'text/javascript');
         wasmURL = await toBlobURL(`${localBase}/ffmpeg-core.wasm`, 'application/wasm');
       } catch (localErr) {
